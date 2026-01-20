@@ -4,26 +4,45 @@ import { useWorkouts } from '../../hooks/useWorkouts'
 import { generateTrainingPlan } from '../../services/aiService'
 import { getWorkoutType } from '../../data/workoutTypes'
 import { Brain, Sparkles, RefreshCw, Check, Clock, MapPin } from 'lucide-react'
+import PlanningWizard from './PlanningWizard'
 
 export default function AIPlanner() {
   const { userProfile } = useAuth()
   const { workouts, currentPlan, savePlan } = useWorkouts()
+  const [showWizard, setShowWizard] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [generatingStep, setGeneratingStep] = useState('')
   const [error, setError] = useState(null)
   const [generatedPlan, setGeneratedPlan] = useState(null)
 
-  const handleGenerate = async () => {
+  const handleStartWizard = () => {
+    setShowWizard(true)
+    setError(null)
+  }
+
+  const handleWizardComplete = async (wizardAnswers) => {
+    setShowWizard(false)
     setGenerating(true)
     setGeneratingStep('Analyserer treningshistorikk...')
     setError(null)
 
     try {
-      // Forbered data for AI
+      // Forbered data for AI med wizard-svar
       const userData = {
-        goals: userProfile?.goals || {},
-        availableDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
-        maxSessionDuration: 90,
+        // Wizard-preferanser
+        planType: wizardAnswers.planType || 'full_plan',
+        goal: wizardAnswers.goal === 'race' ? {
+          type: 'race',
+          ...wizardAnswers.raceDetails
+        } : {
+          type: wizardAnswers.goal
+        },
+        availableDays: wizardAnswers.preferredDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
+        daysPerWeek: wizardAnswers.availability || 4,
+        maxSessionDuration: wizardAnswers.sessionDuration || 60,
+        preferences: wizardAnswers.preferences || '',
+
+        // Eksisterende data
         recentWorkouts: workouts.slice(0, 20).map(w => ({
           date: w.date,
           type: w.type,
@@ -36,8 +55,7 @@ export default function AIPlanner() {
           restingHR: null,
           hrv: null,
           generalFeeling: 'ok'
-        },
-        notes: ''
+        }
       }
 
       setGeneratingStep('Genererer personlig treningsplan...')
@@ -71,6 +89,28 @@ export default function AIPlanner() {
 
   const displayPlan = generatedPlan || currentPlan
 
+  // Vis wizard hvis aktiv
+  if (showWizard) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="font-heading text-2xl font-bold text-text-primary flex items-center gap-2">
+            <Brain className="text-secondary" />
+            Lag din personlige treningsplan
+          </h1>
+          <p className="text-text-secondary mt-1">
+            Svar på noen spørsmål så lager AI en plan tilpasset deg
+          </p>
+        </div>
+
+        <PlanningWizard
+          onComplete={handleWizardComplete}
+          onCancel={() => setShowWizard(false)}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -95,7 +135,7 @@ export default function AIPlanner() {
         </div>
       ) : (
         <button
-          onClick={handleGenerate}
+          onClick={handleStartWizard}
           className="btn-primary w-full py-4"
         >
           <Sparkles size={20} />

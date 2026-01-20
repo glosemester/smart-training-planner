@@ -143,12 +143,14 @@ Gi 2-3 konkrete justeringsforslag i JSON-format:
  */
 function buildUserPrompt(userData) {
   const {
-    goals = {},
+    planType = 'full_plan',
+    goal = {},
     availableDays = [],
-    maxSessionDuration = 90,
+    daysPerWeek = 4,
+    maxSessionDuration = 60,
+    preferences = '',
     recentWorkouts = [],
-    health = {},
-    notes = ''
+    health = {}
   } = userData
 
   // Format recent workouts
@@ -160,24 +162,53 @@ function buildUserPrompt(userData) {
     rpe: w.rpe
   }))
 
+  // Beregn konkurransedato info
+  let goalInfo = ''
+  if (goal.type === 'race' && goal.date) {
+    const raceDate = new Date(goal.date)
+    const today = new Date()
+    const weeksUntilRace = Math.ceil((raceDate - today) / (7 * 24 * 60 * 60 * 1000))
+
+    goalInfo = `
+**KONKURRANSEMÅL:**
+- Distanse: ${goal.distance}
+- Dato: ${goal.date}
+- Uker til konkurranse: ${weeksUntilRace}
+${goal.goalTime ? `- Målsetting: ${goal.goalTime}` : ''}
+
+VIKTIG: Dette er uke ${weeksUntilRace > 12 ? 'base building' : weeksUntilRace > 4 ? 'build-up' : weeksUntilRace > 1 ? 'peak' : 'taper'} fase.`
+  } else {
+    goalInfo = `**MÅL:** ${goal.type === 'general_fitness' ? 'Generell form' : goal.type === 'distance' ? 'Løpe lengre distanser' : goal.type === 'speed' ? 'Bli raskere' : 'Ikke spesifisert'}`
+  }
+
+  // Plantype-spesifikk instruksjon
+  const planTypeInstructions = planType === 'running_only'
+    ? `
+**VIKTIG - KUN LØPEPLAN:**
+Brukeren trener Hyrox/CrossFit på senter med egne økter. Lag KUN plan for løping.
+- IKKE inkluder styrke, Hyrox eller CrossFit i planen
+- Fokuser på løpeutvikling: easy runs, tempo, intervals, long runs
+- Balansér intensitet og hvile for optimal løpeutvikling
+`
+    : `
+**FULL PLAN:**
+Lag en komplett treningsplan som inkluderer både løping OG styrke/Hyrox/CrossFit.
+- Balanser løping (hovedfokus) med styrke
+- 80/20-regelen for løping
+- Unngå overtrening ved å spre hard trening
+`
+
   return `
 Lag en treningsplan for kommende uke basert på følgende informasjon:
 
-**HOVEDMÅL:**
-${goals.primary || 'Ikke satt'}
+${goalInfo}
 
-**DELMÅL:**
-${goals.secondary?.length > 0 ? goals.secondary.map(g => `- ${g}`).join('\n') : 'Ingen delmål satt'}
+${planTypeInstructions}
 
-**UKENTLIGE MÅL:**
-- Løping: ${goals.weeklyTargets?.runningKm || 0} km
-- Styrkeøkter: ${goals.weeklyTargets?.strengthSessions || 0}
-
-**TILGJENGELIGE TRENINGSDAGER:**
-${availableDays.length > 0 ? availableDays.join(', ') : 'Alle dager'}
-
-**MAKS TID PER ØKT:**
-${maxSessionDuration} minutter
+**TILGJENGELIGHET:**
+- Dager per uke: ${daysPerWeek}
+- Foretrukne dager: ${availableDays.join(', ')}
+- Maks tid per økt: ${maxSessionDuration} minutter
 
 **SISTE UKERS TRENING (opptil 20 økter):**
 ${workoutSummary.length > 0 ? JSON.stringify(workoutSummary, null, 2) : 'Ingen tidligere økter registrert'}
@@ -188,9 +219,14 @@ ${workoutSummary.length > 0 ? JSON.stringify(workoutSummary, null, 2) : 'Ingen t
 - HRV: ${health.hrv || 'Ikke registrert'}
 - Generell form: ${health.generalFeeling || 'Ikke registrert'}
 
-**NOTATER/PREFERANSER:**
-${notes || 'Ingen spesielle notater'}
+**PREFERANSER:**
+${preferences || 'Ingen spesielle preferanser'}
 
-Lag en balansert treningsuke som bygger mot målene. Husk 80/20-prinsippet for løping og god balanse mellom belastning og restitusjon.
+Lag en balansert treningsuke som:
+1. Respekterer brukerens tilgjengelighet og preferanser
+2. Bygger mot målet (periodisering hvis konkurranse)
+3. Følger 80/20-prinsippet for løping
+4. Balanserer belastning og restitusjon
+5. Tilpasser seg brukerens nåværende form basert på siste økter
 `
 }
