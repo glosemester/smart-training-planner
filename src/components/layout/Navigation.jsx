@@ -11,7 +11,15 @@ const navItems = [
 
 export default function Navigation() {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 glass safe-bottom" aria-label="Hovednavigasjon">
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 glass"
+      style={{
+        paddingBottom: 'max(env(safe-area-inset-bottom), 0.5rem)',
+        paddingLeft: 'env(safe-area-inset-left)',
+        paddingRight: 'env(safe-area-inset-right)'
+      }}
+      aria-label="Hovednavigasjon"
+    >
       <div className="max-w-lg mx-auto px-2">
         <div className="flex items-center justify-around py-2">
           {navItems.map(({ to, icon: Icon, label, isAction }) => (
