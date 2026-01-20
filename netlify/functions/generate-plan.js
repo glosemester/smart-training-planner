@@ -46,16 +46,43 @@ Output-format: Returner alltid en strukturert JSON med følgende format:
 }`
 
 export const handler = async (event) => {
+  // CORS headers for all responses
+  const headers = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+  }
+
+  // Handle OPTIONS preflight request
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers,
+      body: ''
+    }
+  }
+
   // Only allow POST requests
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
+      headers,
       body: JSON.stringify({ error: 'Method not allowed' })
     }
   }
 
   try {
+    // Validate request body
+    if (!event.body) {
+      throw new Error('Request body is required')
+    }
+
     const { userData, type = 'generate' } = JSON.parse(event.body)
+
+    if (!userData) {
+      throw new Error('userData is required in request body')
+    }
 
     if (!process.env.ANTHROPIC_API_KEY) {
       throw new Error('Anthropic API key not configured')
@@ -96,43 +123,62 @@ Gi 2-3 konkrete justeringsforslag i JSON-format:
       prompt = buildUserPrompt(userData)
     }
 
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
-      system: type === 'adjust' ? undefined : TRAINING_SYSTEM_PROMPT,
-      messages: [
-        { role: 'user', content: prompt }
-      ]
-    })
+    // Call Anthropic API with error handling
+    let message
+    try {
+      message = await client.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2000,
+        system: type === 'adjust' ? undefined : TRAINING_SYSTEM_PROMPT,
+        messages: [
+          { role: 'user', content: prompt }
+        ]
+      })
+    } catch (apiError) {
+      console.error('Anthropic API error:', apiError)
+      throw new Error(`AI API error: ${apiError.message || 'Unknown error'}`)
+    }
 
-    const content = message.content[0].text
+    const content = message.content[0]?.text
+    if (!content) {
+      throw new Error('AI response is empty')
+    }
 
     // Parse JSON from response (may be wrapped in markdown code blocks)
     const jsonMatch = content.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
+      console.error('Failed to parse AI response:', content.substring(0, 200))
       throw new Error('Could not parse JSON from AI response')
     }
 
-    const result = JSON.parse(jsonMatch[0])
+    let result
+    try {
+      result = JSON.parse(jsonMatch[0])
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError, 'Content:', jsonMatch[0].substring(0, 200))
+      throw new Error('Invalid JSON in AI response')
+    }
 
     return {
       statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      },
+      headers,
       body: JSON.stringify(result)
     }
   } catch (error) {
-    console.error('Error generating plan:', error)
+    // Enhanced error logging
+    console.error('Error generating plan:', {
+      message: error.message,
+      stack: error.stack,
+      type: type,
+      hasUserData: !!userData
+    })
+
     return {
       statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      },
+      headers,
       body: JSON.stringify({
-        error: error.message || 'Failed to generate training plan'
+        error: error.message || 'Failed to generate training plan',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       })
     }
   }
