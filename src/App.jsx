@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import LoginScreen from './components/auth/LoginScreen'
+import UpdatePrompt from './components/common/UpdatePrompt'
 
 // Lazy load components for code splitting
 const Layout = lazy(() => import('./components/layout/Layout'))
@@ -44,34 +45,39 @@ function ProtectedRoute({ children }) {
 
 function App() {
   return (
-    <Suspense fallback={<LoadingFallback />}>
-      <Routes>
-        {/* Public route */}
-        <Route path="/login" element={<LoginScreen />} />
+    <>
+      <Suspense fallback={<LoadingFallback />}>
+        <Routes>
+          {/* Public route */}
+          <Route path="/login" element={<LoginScreen />} />
 
-        {/* Protected routes */}
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Layout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Dashboard />} />
-          <Route path="workouts" element={<WorkoutList />} />
-          <Route path="workouts/new" element={<LogWorkout />} />
-          <Route path="workouts/:id" element={<WorkoutDetail />} />
-          <Route path="plan" element={<AIPlanner />} />
-          <Route path="goals" element={<GoalSetting />} />
-          <Route path="stats" element={<Statistics />} />
-          <Route path="health" element={<HealthSync />} />
-        </Route>
+          {/* Protected routes */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Dashboard />} />
+            <Route path="workouts" element={<WorkoutList />} />
+            <Route path="workouts/new" element={<LogWorkout />} />
+            <Route path="workouts/:id" element={<WorkoutDetail />} />
+            <Route path="plan" element={<AIPlanner />} />
+            <Route path="goals" element={<GoalSetting />} />
+            <Route path="stats" element={<Statistics />} />
+            <Route path="health" element={<HealthSync />} />
+          </Route>
 
-        {/* Catch all - redirect to dashboard */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+          {/* Catch all - redirect to dashboard */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+
+      {/* PWA Update Prompt */}
+      <UpdatePrompt />
+    </>
   )
 }
 
