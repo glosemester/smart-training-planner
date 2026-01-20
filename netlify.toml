@@ -2,6 +2,10 @@
   command = "npm run build"
   publish = "dist"
 
+[functions]
+  # Increase timeout for AI generation (Claude kan ta 20-30 sekunder)
+  timeout = 60
+
 # SPA redirect - viktig for React Router
 [[redirects]]
   from = "/*"
