@@ -3,7 +3,7 @@ import { useWorkouts } from '../../hooks/useWorkouts'
 import { getWorkoutType } from '../../data/workoutTypes'
 import { format } from 'date-fns'
 import { nb } from 'date-fns/locale'
-import { ArrowLeft, Edit, Trash2 } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Image as ImageIcon } from 'lucide-react'
 
 export default function WorkoutDetail() {
   const { id } = useParams()
@@ -111,6 +111,35 @@ export default function WorkoutDetail() {
         <div className="card">
           <h3 className="font-medium text-text-primary mb-2">Notater</h3>
           <p className="text-text-secondary whitespace-pre-wrap">{workout.notes}</p>
+        </div>
+      )}
+
+      {/* Images */}
+      {workout.images && workout.images.length > 0 && (
+        <div className="card">
+          <div className="flex items-center gap-2 mb-3">
+            <ImageIcon size={18} className="text-text-secondary" />
+            <h3 className="font-medium text-text-primary">Bilder</h3>
+            <span className="text-xs text-text-muted">({workout.images.length})</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {workout.images.map((imageUrl, index) => (
+              <a
+                key={index}
+                href={imageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="aspect-square rounded-xl overflow-hidden bg-background-secondary border border-white/10 hover:border-primary/50 transition-colors"
+              >
+                <img
+                  src={imageUrl}
+                  alt={`Treningsbilde ${index + 1}`}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                />
+              </a>
+            ))}
+          </div>
         </div>
       )}
     </div>

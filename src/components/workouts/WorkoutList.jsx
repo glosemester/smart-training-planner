@@ -3,7 +3,7 @@ import { useWorkouts } from '../../hooks/useWorkouts'
 import { getWorkoutType } from '../../data/workoutTypes'
 import { format } from 'date-fns'
 import { nb } from 'date-fns/locale'
-import { Plus, ChevronRight } from 'lucide-react'
+import { Plus, ChevronRight, Image as ImageIcon } from 'lucide-react'
 
 export default function WorkoutList() {
   const { workouts, loading } = useWorkouts()
@@ -57,6 +57,12 @@ export default function WorkoutList() {
                     {workout.duration && <span>{workout.duration} min</span>}
                     {workout.running?.distance && <span>{workout.running.distance} km</span>}
                     {workout.rpe && <span>RPE {workout.rpe}</span>}
+                    {workout.images && workout.images.length > 0 && (
+                      <span className="flex items-center gap-1">
+                        <ImageIcon size={12} />
+                        {workout.images.length}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <ChevronRight size={20} className="text-text-muted" />

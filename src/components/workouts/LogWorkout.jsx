@@ -1,14 +1,19 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../hooks/useAuth'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { WORKOUT_TYPES, RPE_SCALE, RUNNING_SURFACES } from '../../data/workoutTypes'
+import { uploadWorkoutImage } from '../../services/imageService'
 import { ArrowLeft, Save } from 'lucide-react'
+import ImageUpload from '../common/ImageUpload'
 
 export default function LogWorkout() {
   const navigate = useNavigate()
-  const { addWorkout } = useWorkouts()
+  const { user } = useAuth()
+  const { addWorkout, updateWorkout } = useWorkouts()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [images, setImages] = useState([])
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -118,7 +123,35 @@ export default function LogWorkout() {
         source: 'manual'
       }
 
-      await addWorkout(workoutData)
+      // Save workout first
+      const workoutId = await addWorkout(workoutData)
+
+      // Upload images if any
+      if (images.length > 0 && user) {
+        const imageUrls = []
+
+        for (const imageFile of images) {
+          // Skip if already a URL (shouldn't happen but just in case)
+          if (typeof imageFile === 'string') {
+            imageUrls.push(imageFile)
+            continue
+          }
+
+          try {
+            const imageData = await uploadWorkoutImage(user.uid, workoutId, imageFile)
+            imageUrls.push(imageData.url)
+          } catch (imgError) {
+            console.error('Failed to upload image:', imgError)
+            // Continue with other images even if one fails
+          }
+        }
+
+        // Update workout with image URLs if any were uploaded
+        if (imageUrls.length > 0) {
+          await updateWorkout(workoutId, { images: imageUrls })
+        }
+      }
+
       navigate('/workouts')
     } catch (err) {
       setError(err.message)
@@ -326,6 +359,16 @@ export default function LogWorkout() {
             placeholder="Hvordan føltes økten?"
             rows={3}
             className="input resize-none"
+          />
+        </div>
+
+        {/* Images */}
+        <div>
+          <label className="input-label">Bilder</label>
+          <ImageUpload
+            images={images}
+            onImagesChange={setImages}
+            maxImages={5}
           />
         </div>
 

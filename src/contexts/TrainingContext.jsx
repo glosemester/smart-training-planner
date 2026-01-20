@@ -109,6 +109,7 @@ export function TrainingProvider({ children }) {
         collection(db, 'users', user.uid, 'workouts'),
         {
           ...workoutData,
+          images: workoutData.images || [],
           date: Timestamp.fromDate(new Date(workoutData.date)),
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now()
