@@ -14,11 +14,7 @@ export default function AIPlanner() {
   const [generatingStep, setGeneratingStep] = useState('')
   const [error, setError] = useState(null)
   const [generatedPlan, setGeneratedPlan] = useState(null)
-
-  const handleStartWizard = () => {
-    setShowWizard(true)
-    setError(null)
-  }
+  const [justSaved, setJustSaved] = useState(false)
 
   const handleWizardComplete = async (wizardAnswers) => {
     setShowWizard(false)
@@ -61,8 +57,23 @@ export default function AIPlanner() {
       setGeneratingStep('Genererer personlig treningsplan...')
       const plan = await generateTrainingPlan(userData)
 
+      setGeneratingStep('Lagrer plan...')
+
+      // Automatisk lagre planen til Firestore
+      const monday = getNextMonday()
+      await savePlan({
+        ...plan,
+        weekStart: monday.toISOString(),
+        generatedBy: 'ai',
+        wizardAnswers: wizardAnswers // Lagre preferanser for fremtidig bruk
+      })
+
       setGeneratingStep('Ferdig!')
-      setGeneratedPlan(plan)
+      setGeneratedPlan(null) // Clear generated plan siden den nå er i currentPlan
+      setJustSaved(true)
+
+      // Skjul suksessmeldingen etter 5 sekunder
+      setTimeout(() => setJustSaved(false), 5000)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -71,19 +82,14 @@ export default function AIPlanner() {
     }
   }
 
-  const handleSavePlan = async () => {
-    if (!generatedPlan) return
-
-    try {
-      const monday = getNextMonday()
-      await savePlan({
-        ...generatedPlan,
-        weekStart: monday.toISOString(),
-        generatedBy: 'ai'
-      })
-      setGeneratedPlan(null)
-    } catch (err) {
-      setError(err.message)
+  const handleRegeneratePlan = () => {
+    // Bekreft før regenerering hvis det finnes en eksisterende plan
+    if (currentPlan) {
+      if (confirm('Dette vil erstatte din nåværende plan. Er du sikker?')) {
+        setShowWizard(true)
+      }
+    } else {
+      setShowWizard(true)
     }
   }
 
@@ -135,11 +141,11 @@ export default function AIPlanner() {
         </div>
       ) : (
         <button
-          onClick={handleStartWizard}
+          onClick={handleRegeneratePlan}
           className="btn-primary w-full py-4"
         >
           <Sparkles size={20} />
-          {currentPlan ? 'Generer ny plan' : 'Generer treningsplan'}
+          {currentPlan ? 'Oppdater treningsplan' : 'Lag treningsplan'}
         </button>
       )}
 
@@ -150,15 +156,24 @@ export default function AIPlanner() {
         </div>
       )}
 
+      {/* Success message if just saved */}
+      {justSaved && (
+        <div className="p-4 bg-success/10 border border-success/20 rounded-xl text-success text-sm flex items-center gap-2">
+          <Check size={18} />
+          <span>Treningsplan lagret! Du finner den her når du kommer tilbake.</span>
+        </div>
+      )}
+
       {/* Plan display */}
       {displayPlan && (
         <div className="space-y-4">
+
           {/* Plan header */}
           <div className="card bg-gradient-to-br from-secondary/20 to-secondary/5 border-secondary/20">
             <div className="flex items-start justify-between">
-              <div>
+              <div className="flex-1">
                 <p className="text-xs text-secondary font-medium uppercase tracking-wide">
-                  {generatedPlan ? 'Ny generert plan' : `Uke ${displayPlan.weekNumber || ''}`}
+                  Uke {displayPlan.weekNumber || ''}
                 </p>
                 <h3 className="font-heading font-bold text-lg text-text-primary mt-1">
                   {displayPlan.focus}
@@ -169,12 +184,6 @@ export default function AIPlanner() {
                   </p>
                 )}
               </div>
-              {generatedPlan && (
-                <button onClick={handleSavePlan} className="btn-primary text-sm">
-                  <Check size={16} />
-                  Bruk
-                </button>
-              )}
             </div>
           </div>
 
