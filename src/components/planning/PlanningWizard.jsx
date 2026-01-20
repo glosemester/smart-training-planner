@@ -147,9 +147,9 @@ export default function PlanningWizard({ onComplete, onCancel }) {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-6" role="dialog" aria-labelledby="wizard-title">
       {/* Progress bar */}
-      <div className="space-y-2">
+      <div className="space-y-2" role="progressbar" aria-valuenow={currentStep + 1} aria-valuemin="1" aria-valuemax={wizardSteps.length}>
         <div className="flex justify-between text-xs text-text-muted">
           <span>Steg {currentStep + 1} av {wizardSteps.length}</span>
           <span>{Math.round(((currentStep + 1) / wizardSteps.length) * 100)}%</span>
@@ -158,6 +158,7 @@ export default function PlanningWizard({ onComplete, onCancel }) {
           <div
             className="h-full bg-primary transition-all duration-300"
             style={{ width: `${((currentStep + 1) / wizardSteps.length) * 100}%` }}
+            aria-hidden="true"
           />
         </div>
       </div>
@@ -165,7 +166,7 @@ export default function PlanningWizard({ onComplete, onCancel }) {
       {/* Step content */}
       <div className="card space-y-6">
         <div>
-          <h2 className="font-heading text-2xl font-bold text-text-primary mb-2">
+          <h2 id="wizard-title" className="font-heading text-2xl font-bold text-text-primary mb-2">
             {step.title}
           </h2>
           <p className="text-text-secondary">
@@ -175,11 +176,14 @@ export default function PlanningWizard({ onComplete, onCancel }) {
 
         {/* Render based on type */}
         {step.type === 'choice' && (
-          <div className="space-y-3">
+          <div className="space-y-3" role="radiogroup" aria-labelledby="wizard-title">
             {step.options.map(option => (
               <button
                 key={option.value}
                 onClick={() => updateAnswer(step.id, option.value)}
+                role="radio"
+                aria-checked={answers[step.id] === option.value}
+                aria-label={`${option.label}${option.description ? ': ' + option.description : ''}`}
                 className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
                   answers[step.id] === option.value
                     ? 'border-primary bg-primary/10'
@@ -187,7 +191,7 @@ export default function PlanningWizard({ onComplete, onCancel }) {
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  {option.icon && <span className="text-2xl">{option.icon}</span>}
+                  {option.icon && <span className="text-2xl" aria-hidden="true">{option.icon}</span>}
                   <div className="flex-1">
                     <p className="font-medium text-text-primary">{option.label}</p>
                     {option.description && (
@@ -195,7 +199,7 @@ export default function PlanningWizard({ onComplete, onCancel }) {
                     )}
                   </div>
                   {answers[step.id] === option.value && (
-                    <Check size={20} className="text-primary flex-shrink-0" />
+                    <Check size={20} className="text-primary flex-shrink-0" aria-hidden="true" />
                   )}
                 </div>
               </button>
@@ -204,7 +208,7 @@ export default function PlanningWizard({ onComplete, onCancel }) {
         )}
 
         {step.type === 'multiselect' && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3" role="group" aria-labelledby="wizard-title">
             {step.options.map(option => {
               const isSelected = answers[step.id]?.includes(option.value)
               return (
@@ -217,6 +221,9 @@ export default function PlanningWizard({ onComplete, onCancel }) {
                       : [...current, option.value]
                     updateAnswer(step.id, newValue)
                   }}
+                  role="checkbox"
+                  aria-checked={isSelected}
+                  aria-label={option.label}
                   className={`p-3 rounded-xl border-2 transition-all ${
                     isSelected
                       ? 'border-primary bg-primary/10'
@@ -225,7 +232,7 @@ export default function PlanningWizard({ onComplete, onCancel }) {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-sm">{option.label}</span>
-                    {isSelected && <Check size={16} className="text-primary" />}
+                    {isSelected && <Check size={16} className="text-primary" aria-hidden="true" />}
                   </div>
                 </button>
               )
@@ -248,6 +255,10 @@ export default function PlanningWizard({ onComplete, onCancel }) {
               value={answers[step.id] || step.default}
               onChange={(e) => updateAnswer(step.id, parseInt(e.target.value))}
               className="w-full h-2 bg-background-secondary rounded-lg appearance-none cursor-pointer accent-primary"
+              aria-label={`${step.title}: ${answers[step.id] || step.default} ${step.unit}`}
+              aria-valuemin={step.min}
+              aria-valuemax={step.max}
+              aria-valuenow={answers[step.id] || step.default}
             />
             <div className="flex justify-between text-xs text-text-muted">
               <span>{step.min} {step.unit}</span>
@@ -259,22 +270,26 @@ export default function PlanningWizard({ onComplete, onCancel }) {
         {step.type === 'race_details' && (
           <div className="space-y-4">
             <div>
-              <label className="input-label">Konkurransedato</label>
+              <label htmlFor="race-date" className="input-label">Konkurransedato</label>
               <input
+                id="race-date"
                 type="date"
                 value={answers[step.id]?.date || ''}
                 onChange={(e) => updateAnswer(step.id, { ...answers[step.id], date: e.target.value })}
                 min={new Date().toISOString().split('T')[0]}
                 className="input"
+                aria-required="true"
               />
             </div>
 
             <div>
-              <label className="input-label">Distanse</label>
+              <label htmlFor="race-distance" className="input-label">Distanse</label>
               <select
+                id="race-distance"
                 value={answers[step.id]?.distance || ''}
                 onChange={(e) => updateAnswer(step.id, { ...answers[step.id], distance: e.target.value })}
                 className="input"
+                aria-required="true"
               >
                 <option value="">Velg distanse</option>
                 <option value="5km">5 km</option>
@@ -286,8 +301,9 @@ export default function PlanningWizard({ onComplete, onCancel }) {
             </div>
 
             <div>
-              <label className="input-label">Målsetting (valgfritt)</label>
+              <label htmlFor="race-goal-time" className="input-label">Målsetting (valgfritt)</label>
               <input
+                id="race-goal-time"
                 type="text"
                 placeholder="F.eks: 45:00 (mm:ss) eller 3:30:00 (tt:mm:ss)"
                 value={answers[step.id]?.goalTime || ''}
@@ -300,9 +316,11 @@ export default function PlanningWizard({ onComplete, onCancel }) {
 
         {step.type === 'textarea' && (
           <textarea
+            id={`wizard-${step.id}`}
             value={answers[step.id] || ''}
             onChange={(e) => updateAnswer(step.id, e.target.value)}
             placeholder={step.placeholder}
+            aria-label={step.title}
             rows={4}
             className="input resize-none"
           />
@@ -312,8 +330,12 @@ export default function PlanningWizard({ onComplete, onCancel }) {
       {/* Navigation */}
       <div className="flex gap-3">
         {currentStep > 0 && (
-          <button onClick={handleBack} className="btn-outline flex-1">
-            <ChevronLeft size={20} />
+          <button
+            onClick={handleBack}
+            className="btn-outline flex-1"
+            aria-label="Gå tilbake til forrige steg"
+          >
+            <ChevronLeft size={20} aria-hidden="true" />
             Tilbake
           </button>
         )}
@@ -322,9 +344,10 @@ export default function PlanningWizard({ onComplete, onCancel }) {
           onClick={handleNext}
           disabled={!canProceed()}
           className="btn-primary flex-1"
+          aria-label={isLastStep ? 'Generer treningsplan' : 'Gå til neste steg'}
         >
           {isLastStep ? 'Generer plan' : 'Neste'}
-          {!isLastStep && <ChevronRight size={20} />}
+          {!isLastStep && <ChevronRight size={20} aria-hidden="true" />}
         </button>
       </div>
 
