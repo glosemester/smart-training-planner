@@ -3,7 +3,7 @@ import { useWorkouts } from '../../hooks/useWorkouts'
 import { getWorkoutType } from '../../data/workoutTypes'
 import { format } from 'date-fns'
 import { nb } from 'date-fns/locale'
-import { Plus, ChevronRight, Filter } from 'lucide-react'
+import { Plus, ChevronRight } from 'lucide-react'
 
 export default function WorkoutList() {
   const { workouts, loading } = useWorkouts()

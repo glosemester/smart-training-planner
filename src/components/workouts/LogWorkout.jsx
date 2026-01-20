@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { WORKOUT_TYPES, RPE_SCALE, RUNNING_SURFACES } from '../../data/workoutTypes'
-import { ArrowLeft, Save, Camera, X } from 'lucide-react'
+import { ArrowLeft, Save } from 'lucide-react'
 
 export default function LogWorkout() {
   const navigate = useNavigate()
@@ -46,12 +46,62 @@ export default function LogWorkout() {
     }))
   }
 
+  const validateForm = () => {
+    // Validate duration
+    const duration = parseInt(formData.duration)
+    if (!duration || duration <= 0) {
+      throw new Error('Varighet må være større enn 0 minutter')
+    }
+    if (duration > 1440) { // 24 hours
+      throw new Error('Varighet kan ikke være mer enn 24 timer (1440 minutter)')
+    }
+
+    // Validate running-specific fields
+    if (isRunning) {
+      const distance = parseFloat(formData.running.distance)
+      if (distance && distance < 0) {
+        throw new Error('Distanse kan ikke være negativ')
+      }
+      if (distance && distance > 500) {
+        throw new Error('Distanse kan ikke være mer enn 500 km')
+      }
+
+      const avgHR = parseInt(formData.running.avgHR)
+      const maxHR = parseInt(formData.running.maxHR)
+
+      if (avgHR && (avgHR < 30 || avgHR > 250)) {
+        throw new Error('Snitt-puls må være mellom 30 og 250 bpm')
+      }
+
+      if (maxHR && (maxHR < 30 || maxHR > 250)) {
+        throw new Error('Maks-puls må være mellom 30 og 250 bpm')
+      }
+
+      if (avgHR && maxHR && maxHR < avgHR) {
+        throw new Error('Maks-puls kan ikke være lavere enn snitt-puls')
+      }
+
+      const elevation = parseInt(formData.running.elevation)
+      if (elevation && elevation < 0) {
+        throw new Error('Høydemeter kan ikke være negativ')
+      }
+      if (elevation && elevation > 10000) {
+        throw new Error('Høydemeter kan ikke være mer enn 10000 meter')
+      }
+    }
+
+    return true
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true)
     setError(null)
 
     try {
+      // Validate form data
+      validateForm()
+
       const workoutData = {
         ...formData,
         title: formData.title || selectedType.name,

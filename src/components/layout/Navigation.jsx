@@ -11,13 +11,14 @@ const navItems = [
 
 export default function Navigation() {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 glass safe-bottom">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 glass safe-bottom" aria-label="Hovednavigasjon">
       <div className="max-w-lg mx-auto px-2">
         <div className="flex items-center justify-around py-2">
           {navItems.map(({ to, icon: Icon, label, isAction }) => (
             <NavLink
               key={to}
               to={to}
+              aria-label={label}
               className={({ isActive }) => {
                 if (isAction) {
                   return `flex flex-col items-center gap-0.5 p-2 -mt-4
@@ -27,7 +28,7 @@ export default function Navigation() {
                 return isActive ? 'nav-item-active' : 'nav-item hover:text-text-secondary'
               }}
             >
-              <Icon size={isAction ? 24 : 22} strokeWidth={isAction ? 2.5 : 2} />
+              <Icon size={isAction ? 24 : 22} strokeWidth={isAction ? 2.5 : 2} aria-hidden="true" />
               {!isAction && (
                 <span className="text-[10px] font-medium">{label}</span>
               )}

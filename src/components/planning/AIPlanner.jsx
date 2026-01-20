@@ -9,11 +9,13 @@ export default function AIPlanner() {
   const { userProfile } = useAuth()
   const { workouts, currentPlan, savePlan } = useWorkouts()
   const [generating, setGenerating] = useState(false)
+  const [generatingStep, setGeneratingStep] = useState('')
   const [error, setError] = useState(null)
   const [generatedPlan, setGeneratedPlan] = useState(null)
 
   const handleGenerate = async () => {
     setGenerating(true)
+    setGeneratingStep('Analyserer treningshistorikk...')
     setError(null)
 
     try {
@@ -38,12 +40,16 @@ export default function AIPlanner() {
         notes: ''
       }
 
+      setGeneratingStep('Genererer personlig treningsplan...')
       const plan = await generateTrainingPlan(userData)
+
+      setGeneratingStep('Ferdig!')
       setGeneratedPlan(plan)
     } catch (err) {
       setError(err.message)
     } finally {
       setGenerating(false)
+      setGeneratingStep('')
     }
   }
 
@@ -79,23 +85,23 @@ export default function AIPlanner() {
       </div>
 
       {/* Generate button */}
-      <button
-        onClick={handleGenerate}
-        disabled={generating}
-        className="btn-primary w-full py-4"
-      >
-        {generating ? (
-          <>
+      {generating ? (
+        <div className="card bg-secondary/10 border-secondary/20">
+          <div className="flex flex-col items-center gap-3 py-2">
             <div className="spinner" />
-            Genererer plan...
-          </>
-        ) : (
-          <>
-            <Sparkles size={20} />
-            {currentPlan ? 'Generer ny plan' : 'Generer treningsplan'}
-          </>
-        )}
-      </button>
+            <p className="text-secondary font-medium">{generatingStep}</p>
+            <p className="text-xs text-text-muted">Dette kan ta 10-30 sekunder...</p>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={handleGenerate}
+          className="btn-primary w-full py-4"
+        >
+          <Sparkles size={20} />
+          {currentPlan ? 'Generer ny plan' : 'Generer treningsplan'}
+        </button>
+      )}
 
       {/* Error */}
       {error && (
@@ -227,7 +233,10 @@ function SessionCard({ session }) {
 function getNextMonday() {
   const today = new Date()
   const dayOfWeek = today.getDay()
-  const daysUntilMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek
+  // If Sunday (0), next Monday is tomorrow (1 day)
+  // If Monday (1), next Monday is today (0 days)
+  // Otherwise, calculate days until next Monday
+  const daysUntilMonday = dayOfWeek === 0 ? 1 : dayOfWeek === 1 ? 0 : 8 - dayOfWeek
   const nextMonday = new Date(today)
   nextMonday.setDate(today.getDate() + daysUntilMonday)
   nextMonday.setHours(0, 0, 0, 0)

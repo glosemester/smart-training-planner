@@ -1,18 +1,63 @@
 import { useState } from 'react'
+import { useAuth } from '../../hooks/useAuth'
+import { doc, setDoc } from 'firebase/firestore'
+import { db } from '../../config/firebase'
 import { Heart, Watch, Upload, RefreshCw, CheckCircle } from 'lucide-react'
 
 export default function HealthSync() {
+  const { user } = useAuth()
   const [syncing, setSyncing] = useState(false)
-  const [lastSync, setLastSync] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const [success, setSuccess] = useState(false)
+
+  const [healthData, setHealthData] = useState({
+    restingHR: '',
+    sleep: ''
+  })
 
   const handleGoogleFitConnect = () => {
     // TODO: Implementer Google Fit OAuth
-    alert('Google Fit-integrasjon kommer snart!')
+    // For fremtidig implementering av Google Fit API
+    setError('Google Fit-integrasjon er ikke implementert ennå. Bruk manuell registrering.')
   }
 
   const handleAppleHealthImport = () => {
     // TODO: Implementer Apple Health XML import
-    alert('Apple Health import kommer snart!')
+    // For fremtidig implementering av Apple Health import
+    setError('Apple Health import er ikke implementert ennå. Bruk manuell registrering.')
+  }
+
+  const handleSaveHealthData = async () => {
+    if (!healthData.restingHR && !healthData.sleep) {
+      setError('Fyll ut minst ett felt')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    setSuccess(false)
+
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const healthDoc = doc(db, `users/${user.uid}/health/${today}`)
+
+      await setDoc(healthDoc, {
+        date: new Date(),
+        restingHR: healthData.restingHR ? parseInt(healthData.restingHR) : null,
+        sleep: healthData.sleep ? parseFloat(healthData.sleep) : null,
+        updatedAt: new Date()
+      }, { merge: true })
+
+      setSuccess(true)
+      setHealthData({ restingHR: '', sleep: '' })
+
+      setTimeout(() => setSuccess(false), 3000)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -77,15 +122,54 @@ export default function HealthSync() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="input-label">Hvilepuls (bpm)</label>
-            <input type="number" placeholder="55" className="input" />
+            <input
+              type="number"
+              placeholder="55"
+              className="input"
+              value={healthData.restingHR}
+              onChange={(e) => setHealthData(prev => ({ ...prev, restingHR: e.target.value }))}
+              min="30"
+              max="200"
+            />
           </div>
           <div>
             <label className="input-label">Søvn (timer)</label>
-            <input type="number" step="0.5" placeholder="7.5" className="input" />
+            <input
+              type="number"
+              step="0.5"
+              placeholder="7.5"
+              className="input"
+              value={healthData.sleep}
+              onChange={(e) => setHealthData(prev => ({ ...prev, sleep: e.target.value }))}
+              min="0"
+              max="24"
+            />
           </div>
         </div>
-        <button className="btn-primary w-full mt-4">
-          Lagre
+
+        {error && (
+          <div className="mt-3 p-3 bg-error/10 border border-error/20 rounded-lg text-error text-sm">
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="mt-3 p-3 bg-success/10 border border-success/20 rounded-lg text-success text-sm flex items-center gap-2">
+            <CheckCircle size={16} />
+            Helsedata lagret!
+          </div>
+        )}
+
+        <button
+          onClick={handleSaveHealthData}
+          disabled={saving}
+          className="btn-primary w-full mt-4"
+        >
+          {saving ? (
+            <div className="spinner" />
+          ) : (
+            'Lagre'
+          )}
         </button>
       </div>
 

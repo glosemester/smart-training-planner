@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { getWorkoutType } from '../../data/workoutTypes'
-import { format, isToday, isTomorrow, startOfWeek, endOfWeek } from 'date-fns'
+import { format, isToday, isTomorrow, isYesterday, startOfWeek, endOfWeek } from 'date-fns'
 import { nb } from 'date-fns/locale'
 import { 
   Calendar, 
@@ -223,10 +223,19 @@ export default function Dashboard() {
 }
 
 function StatCard({ icon, value, label, color }) {
+  // Map color names to Tailwind classes (for JIT compiler compatibility)
+  const bgColors = {
+    running: 'bg-running/20',
+    secondary: 'bg-secondary/20',
+    hyrox: 'bg-hyrox/20',
+    success: 'bg-success/20',
+    primary: 'bg-primary/20'
+  }
+
   return (
     <div className="card">
       <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-xl bg-${color}/20 flex items-center justify-center`}>
+        <div className={`w-10 h-10 rounded-xl ${bgColors[color] || 'bg-primary/20'} flex items-center justify-center`}>
           {icon}
         </div>
         <div>
@@ -255,7 +264,7 @@ function WorkoutMiniCard({ workout }) {
           {workout.title || type.name}
         </p>
         <p className="text-xs text-text-muted">
-          {isToday(date) ? 'I dag' : isTomorrow(date) ? 'I går' : format(date, 'd. MMM', { locale: nb })}
+          {isToday(date) ? 'I dag' : isYesterday(date) ? 'I går' : format(date, 'd. MMM', { locale: nb })}
           {workout.duration && ` • ${workout.duration} min`}
           {workout.running?.distance && ` • ${workout.running.distance} km`}
         </p>

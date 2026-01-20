@@ -1,5 +1,5 @@
 import { useAuth } from '../../hooks/useAuth'
-import { LogOut, Settings } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 
 export default function Header() {
   const { user, signOut } = useAuth()
