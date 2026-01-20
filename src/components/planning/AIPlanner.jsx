@@ -293,7 +293,7 @@ function SessionCard({ session }) {
           </div>
         </div>
       </div>
-    </div>
+    </article>
   )
 }
 
