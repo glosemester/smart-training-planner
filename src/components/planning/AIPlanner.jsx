@@ -132,9 +132,14 @@ export default function AIPlanner() {
 
       {/* Generate button */}
       {generating ? (
-        <div className="card bg-secondary/10 border-secondary/20">
+        <div
+          className="card bg-secondary/10 border-secondary/20"
+          role="status"
+          aria-live="polite"
+          aria-label="Genererer treningsplan"
+        >
           <div className="flex flex-col items-center gap-3 py-2">
-            <div className="spinner" />
+            <div className="spinner" aria-hidden="true" />
             <p className="text-secondary font-medium">{generatingStep}</p>
             <p className="text-xs text-text-muted">Dette kan ta 10-30 sekunder...</p>
           </div>
@@ -143,23 +148,32 @@ export default function AIPlanner() {
         <button
           onClick={handleRegeneratePlan}
           className="btn-primary w-full py-4"
+          aria-label={currentPlan ? 'Oppdater eksisterende treningsplan med AI' : 'Lag ny treningsplan med AI'}
         >
-          <Sparkles size={20} />
+          <Sparkles size={20} aria-hidden="true" />
           {currentPlan ? 'Oppdater treningsplan' : 'Lag treningsplan'}
         </button>
       )}
 
       {/* Error */}
       {error && (
-        <div className="p-4 bg-error/10 border border-error/20 rounded-xl text-error text-sm">
+        <div
+          className="p-4 bg-error/10 border border-error/20 rounded-xl text-error text-sm"
+          role="alert"
+          aria-live="assertive"
+        >
           {error}
         </div>
       )}
 
       {/* Success message if just saved */}
       {justSaved && (
-        <div className="p-4 bg-success/10 border border-success/20 rounded-xl text-success text-sm flex items-center gap-2">
-          <Check size={18} />
+        <div
+          className="p-4 bg-success/10 border border-success/20 rounded-xl text-success text-sm flex items-center gap-2"
+          role="status"
+          aria-live="polite"
+        >
+          <Check size={18} aria-hidden="true" />
           <span>Treningsplan lagret! Du finner den her når du kommer tilbake.</span>
         </div>
       )}
@@ -238,11 +252,15 @@ function SessionCard({ session }) {
   const type = getWorkoutType(session.type)
 
   return (
-    <div className={`card ${session.completed ? 'opacity-60' : ''}`}>
+    <article
+      className={`card ${session.completed ? 'opacity-60' : ''}`}
+      aria-label={`Treningsøkt: ${session.title} på ${dayNames[session.day]}`}
+    >
       <div className="flex items-start gap-3">
-        <div 
+        <div
           className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
           style={{ backgroundColor: `${type.color}20` }}
+          aria-hidden="true"
         >
           {type.icon}
         </div>
@@ -252,7 +270,7 @@ function SessionCard({ session }) {
               {dayNames[session.day]}
             </p>
             {session.completed && (
-              <Check size={16} className="text-success" />
+              <Check size={16} className="text-success" aria-label="Fullført" />
             )}
           </div>
           <h4 className="font-medium text-text-primary mt-0.5">

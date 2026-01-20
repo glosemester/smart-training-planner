@@ -3,8 +3,8 @@
   publish = "dist"
 
 [functions]
-  # Increase timeout for AI generation (Claude kan ta 20-30 sekunder)
-  timeout = 60
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
 
 # SPA redirect - viktig for React Router
 [[redirects]]

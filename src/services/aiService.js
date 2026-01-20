@@ -20,13 +20,29 @@ export async function generateTrainingPlan(userData) {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.error || `API-feil: ${response.status}`)
+
+      // Provide user-friendly error messages
+      if (response.status === 500) {
+        throw new Error(errorData.error || 'Server-feil. Prøv igjen om litt.')
+      } else if (response.status === 429) {
+        throw new Error('For mange forespørsler. Vent litt før du prøver igjen.')
+      } else if (response.status === 503) {
+        throw new Error('Tjenesten er utilgjengelig. Prøv igjen senere.')
+      }
+
+      throw new Error(errorData.error || `Nettverksfeil (${response.status}). Prøv igjen.`)
     }
 
     return await response.json()
   } catch (error) {
     console.error('AI Plan Generation Error:', error)
-    throw new Error(error.message || 'Kunne ikke generere treningsplan')
+
+    // Handle network errors
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Ingen nettverkstilkobling. Sjekk internett-tilkoblingen din.')
+    }
+
+    throw new Error(error.message || 'Kunne ikke generere treningsplan. Prøv igjen.')
   }
 }
 
@@ -48,13 +64,27 @@ export async function getAdjustmentSuggestions(originalPlan, actualWorkouts) {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.error || `API-feil: ${response.status}`)
+
+      // Provide user-friendly error messages
+      if (response.status === 500) {
+        throw new Error(errorData.error || 'Server-feil. Prøv igjen om litt.')
+      } else if (response.status === 429) {
+        throw new Error('For mange forespørsler. Vent litt før du prøver igjen.')
+      }
+
+      throw new Error(errorData.error || `Nettverksfeil (${response.status}). Prøv igjen.`)
     }
 
     return await response.json()
   } catch (error) {
     console.error('AI Adjustment Error:', error)
-    throw new Error(error.message || 'Kunne ikke generere justeringsforslag')
+
+    // Handle network errors
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Ingen nettverkstilkobling. Sjekk internett-tilkoblingen din.')
+    }
+
+    throw new Error(error.message || 'Kunne ikke generere justeringsforslag. Prøv igjen.')
   }
 }
 

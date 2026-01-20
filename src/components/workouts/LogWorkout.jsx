@@ -142,25 +142,29 @@ export default function LogWorkout() {
         </h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6" aria-label="Logg treningsøkt">
         {/* Dato og type */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="input-label">Dato</label>
+            <label htmlFor="workout-date" className="input-label">Dato</label>
             <input
+              id="workout-date"
               type="date"
               value={formData.date}
               onChange={(e) => handleChange('date', e.target.value)}
               className="input"
               required
+              aria-required="true"
             />
           </div>
           <div>
-            <label className="input-label">Type</label>
+            <label htmlFor="workout-type" className="input-label">Type</label>
             <select
+              id="workout-type"
               value={formData.type}
               onChange={(e) => handleChange('type', e.target.value)}
               className="input"
+              aria-label="Velg type treningsøkt"
             >
               {Object.values(WORKOUT_TYPES).map(type => (
                 <option key={type.id} value={type.id}>
@@ -173,8 +177,9 @@ export default function LogWorkout() {
 
         {/* Tittel */}
         <div>
-          <label className="input-label">Tittel (valgfritt)</label>
+          <label htmlFor="workout-title" className="input-label">Tittel (valgfritt)</label>
           <input
+            id="workout-title"
             type="text"
             value={formData.title}
             onChange={(e) => handleChange('title', e.target.value)}
@@ -185,14 +190,16 @@ export default function LogWorkout() {
 
         {/* Varighet */}
         <div>
-          <label className="input-label">Varighet (minutter)</label>
+          <label htmlFor="workout-duration" className="input-label">Varighet (minutter)</label>
           <input
+            id="workout-duration"
             type="number"
             value={formData.duration}
             onChange={(e) => handleChange('duration', e.target.value)}
             placeholder="45"
             className="input"
             required
+            aria-required="true"
           />
         </div>
 
@@ -200,11 +207,12 @@ export default function LogWorkout() {
         {isRunning && (
           <div className="space-y-4 p-4 bg-running/10 rounded-xl">
             <h3 className="font-medium text-running">Løpedetaljer</h3>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="input-label">Distanse (km)</label>
+                <label htmlFor="running-distance" className="input-label">Distanse (km)</label>
                 <input
+                  id="running-distance"
                   type="number"
                   step="0.1"
                   value={formData.running.distance}
@@ -214,8 +222,9 @@ export default function LogWorkout() {
                 />
               </div>
               <div>
-                <label className="input-label">Snittempo</label>
+                <label htmlFor="running-pace" className="input-label">Snittempo</label>
                 <input
+                  id="running-pace"
                   type="text"
                   value={formData.running.avgPace}
                   onChange={(e) => handleRunningChange('avgPace', e.target.value)}
@@ -227,8 +236,9 @@ export default function LogWorkout() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="input-label">Snitt-puls</label>
+                <label htmlFor="running-avg-hr" className="input-label">Snitt-puls</label>
                 <input
+                  id="running-avg-hr"
                   type="number"
                   value={formData.running.avgHR}
                   onChange={(e) => handleRunningChange('avgHR', e.target.value)}
@@ -237,8 +247,9 @@ export default function LogWorkout() {
                 />
               </div>
               <div>
-                <label className="input-label">Maks puls</label>
+                <label htmlFor="running-max-hr" className="input-label">Maks puls</label>
                 <input
+                  id="running-max-hr"
                   type="number"
                   value={formData.running.maxHR}
                   onChange={(e) => handleRunningChange('maxHR', e.target.value)}
@@ -250,8 +261,9 @@ export default function LogWorkout() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="input-label">Høydemeter</label>
+                <label htmlFor="running-elevation" className="input-label">Høydemeter</label>
                 <input
+                  id="running-elevation"
                   type="number"
                   value={formData.running.elevation}
                   onChange={(e) => handleRunningChange('elevation', e.target.value)}
@@ -260,11 +272,13 @@ export default function LogWorkout() {
                 />
               </div>
               <div>
-                <label className="input-label">Underlag</label>
+                <label htmlFor="running-surface" className="input-label">Underlag</label>
                 <select
+                  id="running-surface"
                   value={formData.running.surface}
                   onChange={(e) => handleRunningChange('surface', e.target.value)}
                   className="input"
+                  aria-label="Velg underlag"
                 >
                   {RUNNING_SURFACES.map(s => (
                     <option key={s.id} value={s.id}>
@@ -279,16 +293,21 @@ export default function LogWorkout() {
 
         {/* RPE */}
         <div>
-          <label className="input-label">
+          <label htmlFor="workout-rpe" className="input-label">
             Opplevd anstrengelse (RPE): {formData.rpe}
           </label>
           <input
+            id="workout-rpe"
             type="range"
             min="1"
             max="10"
             value={formData.rpe}
             onChange={(e) => handleChange('rpe', e.target.value)}
             className="w-full h-2 bg-background-secondary rounded-lg appearance-none cursor-pointer accent-primary"
+            aria-label={`Opplevd anstrengelse: ${formData.rpe} av 10`}
+            aria-valuemin="1"
+            aria-valuemax="10"
+            aria-valuenow={formData.rpe}
           />
           <div className="flex justify-between text-xs text-text-muted mt-1">
             <span>Lett</span>
@@ -299,8 +318,9 @@ export default function LogWorkout() {
 
         {/* Notater */}
         <div>
-          <label className="input-label">Notater</label>
+          <label htmlFor="workout-notes" className="input-label">Notater</label>
           <textarea
+            id="workout-notes"
             value={formData.notes}
             onChange={(e) => handleChange('notes', e.target.value)}
             placeholder="Hvordan føltes økten?"
@@ -311,7 +331,11 @@ export default function LogWorkout() {
 
         {/* Error */}
         {error && (
-          <div className="p-4 bg-error/10 border border-error/20 rounded-xl text-error text-sm">
+          <div
+            className="p-4 bg-error/10 border border-error/20 rounded-xl text-error text-sm"
+            role="alert"
+            aria-live="assertive"
+          >
             {error}
           </div>
         )}
@@ -321,9 +345,10 @@ export default function LogWorkout() {
           type="submit"
           disabled={saving}
           className="btn-primary w-full py-4"
+          aria-label={saving ? 'Lagrer treningsøkt' : 'Lagre treningsøkt'}
         >
           {saving ? (
-            <div className="spinner" />
+            <div className="spinner" aria-hidden="true" />
           ) : (
             <>
               <Save size={20} />

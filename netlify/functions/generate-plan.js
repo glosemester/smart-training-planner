@@ -1,5 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk'
 
+// Netlify Function configuration
+export const config = {
+  timeout: 60 // 60 seconds for AI generation
+}
+
 const TRAINING_SYSTEM_PROMPT = `Du er en erfaren treningsplanlegger som spesialiserer seg på utholdenhetstrening og funksjonell fitness. Du lager treningsplaner for en person som trener løping (hovedfokus), Hyrox og CrossFit.
 
 Viktige prinsipper du følger:
