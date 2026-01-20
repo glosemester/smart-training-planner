@@ -159,7 +159,8 @@ export function TrainingProvider({ children }) {
         {
           ...planData,
           weekStart: Timestamp.fromDate(new Date(planData.weekStart)),
-          generatedAt: Timestamp.now()
+          generatedAt: Timestamp.now(),
+          lastModified: Timestamp.now()
         }
       )
       return docRef.id
@@ -168,6 +169,86 @@ export function TrainingProvider({ children }) {
       throw err
     }
   }, [user])
+
+  // Oppdater treningsplan
+  const updatePlan = useCallback(async (planId, updates) => {
+    if (!user) throw new Error('Ikke innlogget')
+
+    try {
+      const planRef = doc(db, 'users', user.uid, 'plans', planId)
+      await updateDoc(planRef, {
+        ...updates,
+        lastModified: Timestamp.now()
+      })
+    } catch (err) {
+      setError(err.message)
+      throw err
+    }
+  }, [user])
+
+  // Oppdater en økt i en plan
+  const updatePlanSession = useCallback(async (planId, sessionId, updates) => {
+    if (!user) throw new Error('Ikke innlogget')
+
+    try {
+      // Hent gjeldende plan
+      const plan = plans.find(p => p.id === planId)
+      if (!plan) throw new Error('Plan ikke funnet')
+
+      // Oppdater økten
+      const updatedSessions = plan.sessions.map(session =>
+        session.id === sessionId
+          ? { ...session, ...updates }
+          : session
+      )
+
+      // Lagre tilbake til Firestore
+      await updatePlan(planId, { sessions: updatedSessions })
+    } catch (err) {
+      setError(err.message)
+      throw err
+    }
+  }, [user, plans, updatePlan])
+
+  // Legg til ny økt i plan
+  const addPlanSession = useCallback(async (planId, session) => {
+    if (!user) throw new Error('Ikke innlogget')
+
+    try {
+      const plan = plans.find(p => p.id === planId)
+      if (!plan) throw new Error('Plan ikke funnet')
+
+      const newSession = {
+        id: `custom-${Date.now()}`,
+        ...session,
+        status: 'planned',
+        movedBy: 'user',
+        movedAt: new Date()
+      }
+
+      const updatedSessions = [...plan.sessions, newSession]
+      await updatePlan(planId, { sessions: updatedSessions })
+    } catch (err) {
+      setError(err.message)
+      throw err
+    }
+  }, [user, plans, updatePlan])
+
+  // Slett økt fra plan
+  const deletePlanSession = useCallback(async (planId, sessionId) => {
+    if (!user) throw new Error('Ikke innlogget')
+
+    try {
+      const plan = plans.find(p => p.id === planId)
+      if (!plan) throw new Error('Plan ikke funnet')
+
+      const updatedSessions = plan.sessions.filter(s => s.id !== sessionId)
+      await updatePlan(planId, { sessions: updatedSessions })
+    } catch (err) {
+      setError(err.message)
+      throw err
+    }
+  }, [user, plans, updatePlan])
 
   // Hent statistikk for periode
   const getStats = useCallback((days = 28) => {
@@ -224,6 +305,10 @@ export function TrainingProvider({ children }) {
     updateWorkout,
     deleteWorkout,
     savePlan,
+    updatePlan,
+    updatePlanSession,
+    addPlanSession,
+    deletePlanSession,
     getStats
   }
 

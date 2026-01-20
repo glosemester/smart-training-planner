@@ -3,18 +3,47 @@ import { useAuth } from '../../hooks/useAuth'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { generateTrainingPlan } from '../../services/aiService'
 import { getWorkoutType } from '../../data/workoutTypes'
-import { Brain, Sparkles, RefreshCw, Check, Clock, MapPin } from 'lucide-react'
+import { Brain, Sparkles, RefreshCw, Check, Clock, MapPin, Edit2, Trash2, Plus, GripVertical } from 'lucide-react'
 import PlanningWizard from './PlanningWizard'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  useDroppable,
+  useDraggable
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 export default function AIPlanner() {
   const { userProfile } = useAuth()
-  const { workouts, currentPlan, savePlan } = useWorkouts()
+  const { workouts, currentPlan, savePlan, updatePlanSession, addPlanSession, deletePlanSession } = useWorkouts()
   const [showWizard, setShowWizard] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [generatingStep, setGeneratingStep] = useState('')
   const [error, setError] = useState(null)
   const [generatedPlan, setGeneratedPlan] = useState(null)
   const [justSaved, setJustSaved] = useState(false)
+  const [editingSession, setEditingSession] = useState(null)
+  const [addingSessionDay, setAddingSessionDay] = useState(null)
+
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates
+    })
+  )
 
   const handleWizardComplete = async (wizardAnswers) => {
     setShowWizard(false)
@@ -93,7 +122,76 @@ export default function AIPlanner() {
     }
   }
 
+  // Håndter drag end
+  const handleDragEnd = async (event) => {
+    const { active, over } = event
+
+    if (!over || !currentPlan) return
+
+    // Extract session ID and day from the IDs
+    const activeId = active.id
+    const overDay = over.id
+
+    // Find the session that was dragged
+    const session = currentPlan.sessions.find(s => s.id === activeId)
+    if (!session) return
+
+    // If the session was dragged to a different day
+    if (session.day !== overDay) {
+      try {
+        await updatePlanSession(currentPlan.id, activeId, { day: overDay })
+      } catch (err) {
+        setError('Kunne ikke flytte økten')
+      }
+    }
+  }
+
+  // Håndter edit session
+  const handleEditSession = async (sessionId, updates) => {
+    if (!currentPlan) return
+
+    try {
+      await updatePlanSession(currentPlan.id, sessionId, updates)
+      setEditingSession(null)
+    } catch (err) {
+      setError('Kunne ikke oppdatere økten')
+    }
+  }
+
+  // Håndter delete session
+  const handleDeleteSession = async (sessionId) => {
+    if (!currentPlan) return
+
+    if (confirm('Er du sikker på at du vil slette denne økten?')) {
+      try {
+        await deletePlanSession(currentPlan.id, sessionId)
+      } catch (err) {
+        setError('Kunne ikke slette økten')
+      }
+    }
+  }
+
+  // Håndter add session
+  const handleAddSession = async (day, sessionData) => {
+    if (!currentPlan) return
+
+    try {
+      await addPlanSession(currentPlan.id, { ...sessionData, day })
+      setAddingSessionDay(null)
+    } catch (err) {
+      setError('Kunne ikke legge til økten')
+    }
+  }
+
   const displayPlan = generatedPlan || currentPlan
+
+  // Grupper økter per dag
+  const sessionsByDay = displayPlan?.sessions?.reduce((acc, session) => {
+    const day = session.day || 'monday'
+    if (!acc[day]) acc[day] = []
+    acc[day].push(session)
+    return acc
+  }, {}) || {}
 
   // Vis wizard hvis aktiv
   if (showWizard) {
@@ -201,12 +299,22 @@ export default function AIPlanner() {
             </div>
           </div>
 
-          {/* Sessions */}
-          <div className="space-y-2">
-            {displayPlan.sessions?.map((session, idx) => (
-              <SessionCard key={idx} session={session} />
-            ))}
-          </div>
+          {/* Sessions grouped by day */}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <div className="space-y-4">
+              {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => (
+                <DayColumn
+                  key={day}
+                  day={day}
+                  sessions={sessionsByDay[day] || []}
+                  onEdit={setEditingSession}
+                  onDelete={handleDeleteSession}
+                  onAddSession={() => setAddingSessionDay(day)}
+                  isEditable={!!currentPlan}
+                />
+              ))}
+            </div>
+          </DndContext>
 
           {/* Tips */}
           {displayPlan.weeklyTips?.length > 0 && (
@@ -234,11 +342,30 @@ export default function AIPlanner() {
           </p>
         </div>
       )}
+
+      {/* Edit Session Modal */}
+      {editingSession && (
+        <EditSessionModal
+          session={editingSession}
+          onSave={handleEditSession}
+          onCancel={() => setEditingSession(null)}
+        />
+      )}
+
+      {/* Add Session Modal */}
+      {addingSessionDay && (
+        <AddSessionModal
+          day={addingSessionDay}
+          onSave={handleAddSession}
+          onCancel={() => setAddingSessionDay(null)}
+        />
+      )}
     </div>
   )
 }
 
-function SessionCard({ session }) {
+// DayColumn component for grouping sessions by day
+function DayColumn({ day, sessions, onEdit, onDelete, onAddSession, isEditable }) {
   const dayNames = {
     monday: 'Mandag',
     tuesday: 'Tirsdag',
@@ -249,14 +376,88 @@ function SessionCard({ session }) {
     sunday: 'Søndag'
   }
 
+  const { setNodeRef } = useDroppable({
+    id: day
+  })
+
+  return (
+    <div className="card" ref={setNodeRef}>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-medium text-text-primary">{dayNames[day]}</h3>
+        {isEditable && (
+          <button
+            onClick={onAddSession}
+            className="text-xs text-primary hover:text-primary-dark flex items-center gap-1"
+            aria-label={`Legg til økt på ${dayNames[day]}`}
+          >
+            <Plus size={14} />
+            Legg til
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-2 min-h-[80px]">
+        {sessions.length === 0 ? (
+          <p className="text-sm text-text-muted italic py-4 text-center">
+            Ingen økter planlagt
+          </p>
+        ) : (
+          sessions.map(session => (
+            <DraggableSessionCard
+              key={session.id || session.title}
+              session={session}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              isEditable={isEditable}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Draggable Session Card
+function DraggableSessionCard({ session, onEdit, onDelete, isEditable }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform
+  } = useDraggable({
+    id: session.id || session.title,
+    disabled: !isEditable
+  })
+
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`
+  } : undefined
+
   const type = getWorkoutType(session.type)
 
   return (
     <article
-      className={`card ${session.completed ? 'opacity-60' : ''}`}
-      aria-label={`Treningsøkt: ${session.title} på ${dayNames[session.day]}`}
+      ref={setNodeRef}
+      style={style}
+      className={`bg-background-secondary border border-white/10 rounded-xl p-3 ${
+        session.completed ? 'opacity-60' : ''
+      }`}
+      aria-label={`Treningsøkt: ${session.title}`}
     >
       <div className="flex items-start gap-3">
+        {/* Drag handle */}
+        {isEditable && (
+          <button
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing text-text-muted hover:text-text-primary mt-1"
+            aria-label="Dra for å flytte økt"
+          >
+            <GripVertical size={16} />
+          </button>
+        )}
+
+        {/* Icon */}
         <div
           className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
           style={{ backgroundColor: `${type.color}20` }}
@@ -264,15 +465,9 @@ function SessionCard({ session }) {
         >
           {type.icon}
         </div>
+
+        {/* Content */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-text-muted uppercase tracking-wide">
-              {dayNames[session.day]}
-            </p>
-            {session.completed && (
-              <Check size={16} className="text-success" aria-label="Fullført" />
-            )}
-          </div>
           <h4 className="font-medium text-text-primary mt-0.5">
             {session.title}
           </h4>
@@ -292,8 +487,188 @@ function SessionCard({ session }) {
             )}
           </div>
         </div>
+
+        {/* Actions */}
+        {isEditable && (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => onEdit(session)}
+              className="p-1.5 text-text-muted hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+              aria-label="Rediger økt"
+            >
+              <Edit2 size={14} />
+            </button>
+            <button
+              onClick={() => onDelete(session.id)}
+              className="p-1.5 text-text-muted hover:text-error hover:bg-error/10 rounded-lg transition-colors"
+              aria-label="Slett økt"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )}
       </div>
     </article>
+  )
+}
+
+// Edit Session Modal
+function EditSessionModal({ session, onSave, onCancel }) {
+  const [formData, setFormData] = useState({
+    title: session.title || '',
+    description: session.description || '',
+    duration_minutes: session.duration_minutes || 60
+  })
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    onSave(session.id, formData)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-background-primary rounded-xl max-w-md w-full p-6">
+        <h2 className="text-xl font-bold text-text-primary mb-4">Rediger økt</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="edit-title" className="input-label">Tittel</label>
+            <input
+              id="edit-title"
+              type="text"
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className="input"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="edit-description" className="input-label">Beskrivelse</label>
+            <textarea
+              id="edit-description"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="input resize-none"
+              rows={3}
+            />
+          </div>
+          <div>
+            <label htmlFor="edit-duration" className="input-label">Varighet (minutter)</label>
+            <input
+              id="edit-duration"
+              type="number"
+              value={formData.duration_minutes}
+              onChange={(e) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) })}
+              className="input"
+              min="1"
+              required
+            />
+          </div>
+          <div className="flex gap-3">
+            <button type="button" onClick={onCancel} className="btn-outline flex-1">
+              Avbryt
+            </button>
+            <button type="submit" className="btn-primary flex-1">
+              Lagre
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// Add Session Modal
+function AddSessionModal({ day, onSave, onCancel }) {
+  const [formData, setFormData] = useState({
+    type: 'hyrox',
+    title: '',
+    description: '',
+    duration_minutes: 60
+  })
+
+  const dayNames = {
+    monday: 'Mandag',
+    tuesday: 'Tirsdag',
+    wednesday: 'Onsdag',
+    thursday: 'Torsdag',
+    friday: 'Fredag',
+    saturday: 'Lørdag',
+    sunday: 'Søndag'
+  }
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    onSave(day, formData)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-background-primary rounded-xl max-w-md w-full p-6">
+        <h2 className="text-xl font-bold text-text-primary mb-4">
+          Legg til økt - {dayNames[day]}
+        </h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="add-type" className="input-label">Type</label>
+            <select
+              id="add-type"
+              value={formData.type}
+              onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+              className="input"
+            >
+              <option value="hyrox">Hyrox</option>
+              <option value="crossfit">CrossFit</option>
+              <option value="strength">Styrketrening</option>
+              <option value="rest">Hviledag</option>
+              <option value="other">Annet</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="add-title" className="input-label">Tittel</label>
+            <input
+              id="add-title"
+              type="text"
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className="input"
+              placeholder="F.eks. Hyrox-økt på senter"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="add-description" className="input-label">Beskrivelse</label>
+            <textarea
+              id="add-description"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="input resize-none"
+              rows={3}
+              placeholder="Beskriv økten..."
+            />
+          </div>
+          <div>
+            <label htmlFor="add-duration" className="input-label">Varighet (minutter)</label>
+            <input
+              id="add-duration"
+              type="number"
+              value={formData.duration_minutes}
+              onChange={(e) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) })}
+              className="input"
+              min="1"
+              required
+            />
+          </div>
+          <div className="flex gap-3">
+            <button type="button" onClick={onCancel} className="btn-outline flex-1">
+              Avbryt
+            </button>
+            <button type="submit" className="btn-primary flex-1">
+              Legg til
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   )
 }
 
