@@ -5,6 +5,7 @@ import { generateTrainingPlan } from '../../services/aiService'
 import { getWorkoutType } from '../../data/workoutTypes'
 import { Brain, Sparkles, RefreshCw, Check, Clock, MapPin, Edit2, Trash2, Plus, GripVertical } from 'lucide-react'
 import PlanningWizard from './PlanningWizard'
+import PlanAnalysis from './PlanAnalysis'
 import {
   DndContext,
   closestCenter,
@@ -328,6 +329,16 @@ export default function AIPlanner() {
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {/* Plan Analysis - show only for saved plans (currentPlan) */}
+          {currentPlan && !generatedPlan && (
+            <div>
+              <h3 className="font-heading text-lg font-bold text-text-primary mb-4">
+                Analyse av uke {currentPlan.weekNumber}
+              </h3>
+              <PlanAnalysis plan={currentPlan} />
             </div>
           )}
         </div>
