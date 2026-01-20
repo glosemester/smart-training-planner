@@ -53,8 +53,8 @@
   }
 
   .btn-primary {
-    @apply btn bg-primary text-white hover:bg-primary-light 
-           shadow-glow-primary hover:shadow-glow-primary/50;
+    @apply btn bg-primary text-white hover:bg-primary-light
+           shadow-glow-primary;
   }
 
   .btn-secondary {
