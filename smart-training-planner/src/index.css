@@ -1,0 +1,186 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom base styles */
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-background text-text-primary min-h-screen;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', system-ui, sans-serif;
+    @apply font-semibold;
+  }
+
+  /* Remove default focus outlines and add custom */
+  *:focus {
+    @apply outline-none;
+  }
+
+  *:focus-visible {
+    @apply ring-2 ring-primary ring-offset-2 ring-offset-background;
+  }
+
+  /* Prevent pull-to-refresh on mobile */
+  body {
+    overscroll-behavior-y: contain;
+  }
+}
+
+/* Custom component styles */
+@layer components {
+  /* Cards */
+  .card {
+    @apply bg-background-card rounded-2xl p-4 border border-white/5;
+  }
+
+  .card-elevated {
+    @apply bg-background-elevated rounded-2xl p-4 shadow-lg;
+  }
+
+  /* Buttons */
+  .btn {
+    @apply px-4 py-3 rounded-xl font-medium transition-all duration-200 
+           active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
+           flex items-center justify-center gap-2;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary text-white hover:bg-primary-light 
+           shadow-glow-primary hover:shadow-glow-primary/50;
+  }
+
+  .btn-secondary {
+    @apply btn bg-secondary text-white hover:bg-secondary-light;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-text-primary hover:bg-white/5;
+  }
+
+  .btn-outline {
+    @apply btn bg-transparent border border-white/20 text-text-primary 
+           hover:bg-white/5 hover:border-white/30;
+  }
+
+  /* Inputs */
+  .input {
+    @apply w-full px-4 py-3 bg-background-secondary rounded-xl 
+           border border-white/10 text-text-primary placeholder-text-muted
+           focus:border-primary focus:ring-1 focus:ring-primary
+           transition-colors duration-200;
+  }
+
+  .input-label {
+    @apply block text-sm font-medium text-text-secondary mb-2;
+  }
+
+  /* Navigation */
+  .nav-item {
+    @apply flex flex-col items-center gap-1 p-2 rounded-xl
+           text-text-muted transition-colors duration-200;
+  }
+
+  .nav-item-active {
+    @apply nav-item text-primary bg-primary/10;
+  }
+
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+
+  .badge-running {
+    @apply badge bg-running/20 text-running;
+  }
+
+  .badge-hyrox {
+    @apply badge bg-hyrox/20 text-hyrox;
+  }
+
+  .badge-crossfit {
+    @apply badge bg-crossfit/20 text-crossfit;
+  }
+
+  .badge-strength {
+    @apply badge bg-strength/20 text-strength;
+  }
+
+  .badge-rest {
+    @apply badge bg-rest/20 text-rest;
+  }
+
+  /* Stats */
+  .stat-value {
+    @apply text-2xl font-heading font-bold text-text-primary;
+  }
+
+  .stat-label {
+    @apply text-sm text-text-muted;
+  }
+
+  /* Loading spinner */
+  .spinner {
+    @apply w-6 h-6 border-2 border-primary border-t-transparent 
+           rounded-full animate-spin;
+  }
+}
+
+/* Custom utilities */
+@layer utilities {
+  /* Glass effect */
+  .glass {
+    @apply bg-white/5 backdrop-blur-lg border border-white/10;
+  }
+
+  /* Gradient text */
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent;
+  }
+
+  /* Hide scrollbar */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Safe area padding for mobile */
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 16px);
+  }
+
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 16px);
+  }
+}
+
+/* Animations */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.05) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
