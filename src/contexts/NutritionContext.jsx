@@ -32,6 +32,13 @@ export function NutritionProvider({ children }) {
 
     setLoading(true)
 
+    // Debug: Log user info
+    console.log('🔍 NutritionContext - Fetching meals for user:', {
+      uid: user.uid,
+      email: user.email,
+      path: `users/${user.uid}/meals`
+    })
+
     // Hent måltider fra siste 30 dager
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
@@ -45,6 +52,7 @@ export function NutritionProvider({ children }) {
     const unsubscribe = onSnapshot(
       mealsQuery,
       (snapshot) => {
+        console.log('✅ Meals fetched successfully:', snapshot.docs.length, 'meals')
         const mealData = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
@@ -54,7 +62,11 @@ export function NutritionProvider({ children }) {
         setLoading(false)
       },
       (err) => {
-        console.error('Error fetching meals:', err)
+        console.error('❌ Error fetching meals:', {
+          code: err.code,
+          message: err.message,
+          details: err
+        })
         setError(err.message)
         setLoading(false)
       }
@@ -67,6 +79,12 @@ export function NutritionProvider({ children }) {
   const addMeal = useCallback(async (mealData) => {
     if (!user) throw new Error('Ikke innlogget')
 
+    console.log('📝 Adding meal to Firestore:', {
+      uid: user.uid,
+      path: `users/${user.uid}/meals`,
+      mealData
+    })
+
     try {
       const docRef = await addDoc(
         collection(db, 'users', user.uid, 'meals'),
@@ -77,8 +95,14 @@ export function NutritionProvider({ children }) {
           updatedAt: Timestamp.now()
         }
       )
+      console.log('✅ Meal added successfully with ID:', docRef.id)
       return docRef.id
     } catch (err) {
+      console.error('❌ Error adding meal:', {
+        code: err.code,
+        message: err.message,
+        details: err
+      })
       setError(err.message)
       throw err
     }
