@@ -5,10 +5,13 @@ import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, Clock, MapPin, 
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { getWorkoutType } from '../../data/workoutTypes'
 import { useNavigate } from 'react-router-dom'
+import { useToast } from '../../hooks/useToast'
+import ToastContainer from '../common/ToastContainer'
 
 export default function TrainingCalendar() {
   const { plans, workouts, updatePlanSession } = useWorkouts()
   const navigate = useNavigate()
+  const toast = useToast()
   const [startDate, setStartDate] = useState(new Date())
   const [viewMode, setViewMode] = useState('month') // 'month' or 'week'
   const [selectedDate, setSelectedDate] = useState(null)
@@ -109,10 +112,11 @@ export default function TrainingCalendar() {
         completedAt: new Date()
       })
 
-      console.log('✅ Session marked as completed')
+      const workoutType = getWorkoutType(session.type)
+      toast.success(`${workoutType.icon} ${session.title || workoutType.name} markert som fullført!`)
     } catch (error) {
       console.error('Failed to mark session as completed:', error)
-      alert('Kunne ikke markere økten som fullført. Prøv igjen.')
+      toast.error('Kunne ikke markere økten som fullført. Prøv igjen.')
     } finally {
       setLoading(false)
     }
@@ -168,10 +172,12 @@ export default function TrainingCalendar() {
         movedAt: new Date()
       })
 
-      console.log(`✅ Session moved to ${englishDay}`)
+      const workoutType = getWorkoutType(draggedSession.type)
+      const dayLabel = format(targetDate, 'EEEE d. MMMM', { locale: nb })
+      toast.success(`${workoutType.icon} ${workoutType.name} flyttet til ${dayLabel}`)
     } catch (error) {
       console.error('Failed to move session:', error)
-      alert('Kunne ikke flytte økten. Prøv igjen.')
+      toast.error('Kunne ikke flytte økten. Prøv igjen.')
     } finally {
       setLoading(false)
       setDraggedSession(null)
@@ -311,8 +317,10 @@ export default function TrainingCalendar() {
   }, [plans, workouts])
 
   return (
-    <div className="min-h-screen bg-background pb-24 px-4 pt-6">
-      {/* Header */}
+    <>
+      <ToastContainer toasts={toast.toasts} removeToast={toast.removeToast} />
+      <div className="min-h-screen bg-background pb-24 px-4 pt-6">
+        {/* Header */}
       <div className="mb-6 animate-fade-in-up">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -433,7 +441,8 @@ export default function TrainingCalendar() {
           loading={loading}
         />
       )}
-    </div>
+      </div>
+    </>
   )
 }
 

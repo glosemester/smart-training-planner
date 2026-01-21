@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom'
 import Header from './Header'
 import Navigation from './Navigation'
+import QuickActions from '../common/QuickActions'
 
 export default function Layout() {
   return (
@@ -14,6 +15,9 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
+
+      {/* Quick Actions FAB */}
+      <QuickActions />
 
       {/* Bottom navigation */}
       <Navigation />

@@ -4,25 +4,34 @@ import { getWorkoutType } from '../../data/workoutTypes'
 import { format } from 'date-fns'
 import { nb } from 'date-fns/locale'
 import { Plus, ChevronRight, Image as ImageIcon } from 'lucide-react'
+import { SkeletonWorkout } from '../common/Skeleton'
 
 export default function WorkoutList() {
   const { workouts, loading } = useWorkouts()
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="spinner" />
+      <div className="space-y-4 animate-fade-in-up">
+        <div className="flex items-center justify-between">
+          <div className="h-8 w-48 bg-white/10 rounded animate-pulse" />
+          <div className="h-10 w-24 bg-white/10 rounded animate-pulse" />
+        </div>
+        <div className="space-y-2">
+          {[...Array(5)].map((_, i) => (
+            <SkeletonWorkout key={i} />
+          ))}
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 animate-fade-in-up">
       <div className="flex items-center justify-between">
         <h1 className="font-heading text-2xl font-bold text-text-primary">
           Treningsøkter
         </h1>
-        <Link to="/workouts/new" className="btn-primary">
+        <Link to="/workouts/new" className="btn-primary hover:scale-105 transition-transform">
           <Plus size={20} />
           Ny økt
         </Link>
@@ -30,15 +39,16 @@ export default function WorkoutList() {
 
       {workouts.length > 0 ? (
         <div className="space-y-2">
-          {workouts.map(workout => {
+          {workouts.map((workout, index) => {
             const type = getWorkoutType(workout.type)
             const date = new Date(workout.date)
             
             return (
-              <Link 
+              <Link
                 key={workout.id}
                 to={`/workouts/${workout.id}`}
-                className="card flex items-center gap-3 hover:bg-white/5 transition-colors"
+                className="card flex items-center gap-3 hover:bg-white/5 hover:scale-[1.02] transition-all duration-300 hover:shadow-lg animate-fade-in-up"
+                style={{ animationDelay: `${index * 50}ms` }}
               >
                 <div 
                   className="w-12 h-12 rounded-xl flex items-center justify-center text-xl"
