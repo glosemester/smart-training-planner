@@ -1,16 +1,19 @@
 import { useState, useMemo } from 'react'
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, startOfWeek, endOfWeek, isSameMonth, isToday, isSameDay } from 'date-fns'
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, startOfWeek, endOfWeek, isSameMonth, isToday, isSameDay, isPast, differenceInDays } from 'date-fns'
 import { nb } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, Clock, MapPin } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, Clock, MapPin, CheckCircle, Edit, TrendingUp, Target, Flame } from 'lucide-react'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { getWorkoutType } from '../../data/workoutTypes'
+import { useNavigate } from 'react-router-dom'
 
 export default function TrainingCalendar() {
-  const { plans, workouts } = useWorkouts()
+  const { plans, workouts, updatePlanSession } = useWorkouts()
+  const navigate = useNavigate()
   const [startDate, setStartDate] = useState(new Date())
   const [viewMode, setViewMode] = useState('month') // 'month' or 'week'
   const [selectedDate, setSelectedDate] = useState(null)
   const [showDayDetail, setShowDayDetail] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   // Generate 6 months of dates
   const monthsToShow = useMemo(() => {
@@ -85,7 +88,164 @@ export default function TrainingCalendar() {
     }
   }
 
+  const handleMarkCompleted = async (session) => {
+    try {
+      setLoading(true)
+
+      // Find the plan that contains this session
+      const plan = plans.find(p =>
+        p.sessions?.some(s => s.id === session.id)
+      )
+
+      if (!plan) {
+        throw new Error('Could not find plan for session')
+      }
+
+      // Update session status to completed
+      await updatePlanSession(plan.id, session.id, {
+        status: 'completed',
+        completedAt: new Date()
+      })
+
+      console.log('✅ Session marked as completed')
+    } catch (error) {
+      console.error('Failed to mark session as completed:', error)
+      alert('Kunne ikke markere økten som fullført. Prøv igjen.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleLogWorkout = () => {
+    setShowDayDetail(false)
+    navigate('/workouts/new')
+  }
+
   const selectedSessions = selectedDate ? getSessionsForDate(selectedDate) : []
+
+  // Calculate completion statistics
+  const stats = useMemo(() => {
+    const today = new Date()
+    const weekStart = startOfWeek(today, { weekStartsOn: 1 })
+    const monthStart = startOfMonth(today)
+
+    let weekPlanned = 0
+    let weekCompleted = 0
+    let monthPlanned = 0
+    let monthCompleted = 0
+
+    // Count planned vs completed for current week and month
+    plans.forEach(plan => {
+      if (!plan.sessions) return
+
+      const planWeekStart = plan.weekStart?.toDate?.() || new Date(plan.weekStart)
+
+      plan.sessions.forEach(session => {
+        const dayIndex = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].indexOf(session.day)
+        if (dayIndex === -1) return
+
+        const sessionDate = new Date(planWeekStart)
+        sessionDate.setDate(planWeekStart.getDate() + dayIndex)
+
+        // Only count past and today sessions
+        if (sessionDate > today) return
+
+        // Week stats
+        if (sessionDate >= weekStart && sessionDate <= today) {
+          weekPlanned++
+          if (session.status === 'completed') weekCompleted++
+        }
+
+        // Month stats
+        if (sessionDate >= monthStart && sessionDate <= today) {
+          monthPlanned++
+          if (session.status === 'completed') monthCompleted++
+        }
+      })
+    })
+
+    // Calculate streak
+    let currentStreak = 0
+    let bestStreak = 0
+    let tempStreak = 0
+    let lastWorkoutDate = null
+
+    // Get all workout dates (from both completed sessions and logged workouts)
+    const workoutDates = new Set()
+
+    // Add completed sessions
+    plans.forEach(plan => {
+      if (!plan.sessions) return
+      const planWeekStart = plan.weekStart?.toDate?.() || new Date(plan.weekStart)
+
+      plan.sessions.forEach(session => {
+        if (session.status === 'completed') {
+          const dayIndex = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].indexOf(session.day)
+          if (dayIndex !== -1) {
+            const sessionDate = new Date(planWeekStart)
+            sessionDate.setDate(planWeekStart.getDate() + dayIndex)
+            workoutDates.add(format(sessionDate, 'yyyy-MM-dd'))
+          }
+        }
+      })
+    })
+
+    // Add logged workouts
+    workouts.forEach(workout => {
+      const workoutDate = workout.date?.toDate?.() || new Date(workout.date)
+      workoutDates.add(format(workoutDate, 'yyyy-MM-dd'))
+    })
+
+    // Sort dates and calculate streaks
+    const sortedDates = Array.from(workoutDates).sort().reverse()
+
+    for (let i = 0; i < sortedDates.length; i++) {
+      const currentDate = new Date(sortedDates[i])
+
+      if (lastWorkoutDate === null) {
+        // First workout
+        const daysDiff = differenceInDays(today, currentDate)
+        if (daysDiff <= 1) {
+          // Today or yesterday
+          tempStreak = 1
+          currentStreak = 1
+        } else {
+          tempStreak = 1
+        }
+      } else {
+        const daysDiff = differenceInDays(lastWorkoutDate, currentDate)
+        if (daysDiff === 1) {
+          // Consecutive day
+          tempStreak++
+          if (currentStreak > 0) currentStreak++
+        } else {
+          // Gap in streak
+          if (currentStreak > 0) {
+            // End current streak
+            currentStreak = 0
+          }
+          tempStreak = 1
+        }
+      }
+
+      if (tempStreak > bestStreak) {
+        bestStreak = tempStreak
+      }
+
+      lastWorkoutDate = currentDate
+    }
+
+    return {
+      weekCompleted,
+      weekPlanned,
+      weekRate: weekPlanned > 0 ? Math.round((weekCompleted / weekPlanned) * 100) : 0,
+      monthCompleted,
+      monthPlanned,
+      monthRate: monthPlanned > 0 ? Math.round((monthCompleted / monthPlanned) * 100) : 0,
+      currentStreak,
+      bestStreak
+    }
+  }, [plans, workouts])
 
   return (
     <div className="min-h-screen bg-background pb-24 px-4 pt-6">
@@ -110,7 +270,7 @@ export default function TrainingCalendar() {
         </div>
 
         {/* Navigation */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
           <button
             onClick={goToPreviousMonth}
             className="p-2 rounded-lg bg-background-secondary hover:bg-background-tertiary transition-colors"
@@ -134,6 +294,51 @@ export default function TrainingCalendar() {
             <ChevronRight size={20} className="text-text-secondary" />
           </button>
         </div>
+
+        {/* Completion Statistics */}
+        <div className="grid grid-cols-3 gap-3">
+          {/* Week completion */}
+          <div className="bg-background-secondary rounded-xl p-3 border border-white/5">
+            <div className="flex items-center gap-2 mb-2">
+              <Target size={16} className="text-primary" />
+              <span className="text-xs font-medium text-text-muted">Uke</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-2xl font-bold text-white">{stats.weekRate}%</span>
+              <span className="text-[10px] text-text-muted mt-0.5">
+                {stats.weekCompleted}/{stats.weekPlanned} økter
+              </span>
+            </div>
+          </div>
+
+          {/* Month completion */}
+          <div className="bg-background-secondary rounded-xl p-3 border border-white/5">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp size={16} className="text-secondary" />
+              <span className="text-xs font-medium text-text-muted">Måned</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-2xl font-bold text-white">{stats.monthRate}%</span>
+              <span className="text-[10px] text-text-muted mt-0.5">
+                {stats.monthCompleted}/{stats.monthPlanned} økter
+              </span>
+            </div>
+          </div>
+
+          {/* Streak */}
+          <div className="bg-background-secondary rounded-xl p-3 border border-white/5">
+            <div className="flex items-center gap-2 mb-2">
+              <Flame size={16} className="text-warning" />
+              <span className="text-xs font-medium text-text-muted">Streak</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-2xl font-bold text-white">{stats.currentStreak}</span>
+              <span className="text-[10px] text-text-muted mt-0.5">
+                {stats.currentStreak === 1 ? 'dag' : 'dager'} (best: {stats.bestStreak})
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Calendar Grid - 6 months */}
@@ -154,6 +359,9 @@ export default function TrainingCalendar() {
           date={selectedDate}
           sessions={selectedSessions}
           onClose={() => setShowDayDetail(false)}
+          onMarkCompleted={handleMarkCompleted}
+          onLogWorkout={handleLogWorkout}
+          loading={loading}
         />
       )}
     </div>
@@ -289,8 +497,9 @@ function DayCell({ date, sessions, isCurrentMonth, isToday, onClick }) {
   )
 }
 
-function DayDetailModal({ date, sessions, onClose }) {
+function DayDetailModal({ date, sessions, onClose, onMarkCompleted, onLogWorkout, loading }) {
   const formattedDate = format(date, 'EEEE d. MMMM yyyy', { locale: nb })
+  const isPastDate = isPast(date) && !isToday(date)
 
   // Group by status
   const planned = sessions.filter(s => s.status === 'planned')
@@ -329,7 +538,12 @@ function DayDetailModal({ date, sessions, onClose }) {
               </h3>
               <div className="space-y-2">
                 {completed.map((session, idx) => (
-                  <SessionCard key={idx} session={session} />
+                  <SessionCard
+                    key={idx}
+                    session={session}
+                    onMarkCompleted={null}
+                    loading={loading}
+                  />
                 ))}
               </div>
             </div>
@@ -344,9 +558,28 @@ function DayDetailModal({ date, sessions, onClose }) {
               </h3>
               <div className="space-y-2">
                 {planned.map((session, idx) => (
-                  <SessionCard key={idx} session={session} />
+                  <SessionCard
+                    key={idx}
+                    session={session}
+                    onMarkCompleted={onMarkCompleted}
+                    loading={loading}
+                    showCompleteButton={isPastDate || isToday(date)}
+                  />
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          {planned.length > 0 && (isPastDate || isToday(date)) && (
+            <div className="pt-2 border-t border-white/10">
+              <button
+                onClick={onLogWorkout}
+                className="btn-secondary w-full py-3 flex items-center justify-center gap-2"
+              >
+                <Edit size={18} />
+                Logg ny økt
+              </button>
             </div>
           )}
         </div>
@@ -355,7 +588,7 @@ function DayDetailModal({ date, sessions, onClose }) {
   )
 }
 
-function SessionCard({ session }) {
+function SessionCard({ session, onMarkCompleted, loading, showCompleteButton }) {
   const workoutType = getWorkoutType(session.type)
   const isCompleted = session.status === 'completed'
 
@@ -451,6 +684,18 @@ function SessionCard({ session }) {
           </div>
           <span className="text-xs font-medium text-white">{session.rpe}/10</span>
         </div>
+      )}
+
+      {/* Complete button */}
+      {showCompleteButton && onMarkCompleted && !isCompleted && (
+        <button
+          onClick={() => onMarkCompleted(session)}
+          disabled={loading}
+          className="mt-3 w-full btn-primary py-2 text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <CheckCircle size={16} />
+          {loading ? 'Markerer...' : 'Marker som fullført'}
+        </button>
       )}
     </div>
   )
