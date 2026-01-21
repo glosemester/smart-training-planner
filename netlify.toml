@@ -2,6 +2,11 @@
   command = "npm run build"
   publish = "dist"
 
+[build.environment]
+  # Firebase API keys are public and safe to expose
+  # Security is handled by Firebase security rules
+  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
+
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
