@@ -5,15 +5,16 @@ import { useWorkouts } from '../../hooks/useWorkouts'
 import { getWorkoutType } from '../../data/workoutTypes'
 import { format, isToday, isTomorrow, isYesterday, startOfWeek, endOfWeek } from 'date-fns'
 import { nb } from 'date-fns/locale'
-import { 
-  Calendar, 
-  TrendingUp, 
-  Clock, 
+import {
+  Calendar,
+  TrendingUp,
+  Clock,
   MapPin,
   ChevronRight,
   Flame,
   Target
 } from 'lucide-react'
+import DailySummaryCard from './DailySummaryCard'
 
 export default function Dashboard() {
   const { userProfile } = useAuth()
@@ -101,6 +102,9 @@ export default function Dashboard() {
           {getGreetingMessage()}
         </p>
       </div>
+
+      {/* AI Daily Summary */}
+      <DailySummaryCard />
 
       {/* Neste økt */}
       {nextWorkout && (

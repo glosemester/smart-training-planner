@@ -13,9 +13,9 @@ export default defineConfig({
         enabled: true
       },
       manifest: {
-        name: 'Smart Training Planner',
-        short_name: 'Training',
-        description: 'AI-drevet treningsplanlegger for løping, Hyrox og CrossFit',
+        name: 'RunCoach',
+        short_name: 'RunCoach',
+        description: 'AI-drevet treningscoach for løping, ernæring og Hyrox/CrossFit',
         theme_color: '#ff6b35',
         background_color: '#0f0f0f',
         display: 'standalone',
