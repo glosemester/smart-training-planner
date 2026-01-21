@@ -15,6 +15,7 @@ const GoalSetting = lazy(() => import('./components/planning/GoalSetting'))
 const Statistics = lazy(() => import('./components/stats/Statistics'))
 const HealthSync = lazy(() => import('./components/health/HealthSync'))
 const AIChat = lazy(() => import('./components/chat/AIChat'))
+const NutritionTracker = lazy(() => import('./components/nutrition/NutritionTracker'))
 
 // Loading fallback component
 function LoadingFallback() {
@@ -70,6 +71,7 @@ function App() {
             <Route path="stats" element={<Statistics />} />
             <Route path="health" element={<HealthSync />} />
             <Route path="chat" element={<AIChat />} />
+            <Route path="nutrition" element={<NutritionTracker />} />
           </Route>
 
           {/* Catch all - redirect to dashboard */}
