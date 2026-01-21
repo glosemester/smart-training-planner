@@ -151,11 +151,23 @@ export default function ImageUpload({ images = [], onImagesChange, maxImages = 5
       )}
 
       {/* Info text */}
-      <p className="text-xs text-text-muted">
-        {images.length === 0
-          ? `Last opp bilder av økten (maks ${maxImages})`
-          : `${images.length} av ${maxImages} bilder`}
-      </p>
+      <div className="space-y-1">
+        <p className="text-xs text-text-muted">
+          {images.length === 0
+            ? `Last opp bilder av økten (maks ${maxImages})`
+            : `${images.length} av ${maxImages} bilder`}
+        </p>
+        {maxImages > 1 && images.length === 0 && (
+          <p className="text-xs text-secondary">
+            💡 Tips: Last opp både whiteboard og Garmin/klokke for best resultat
+          </p>
+        )}
+        {images.length > 1 && (
+          <p className="text-xs text-success">
+            ✓ Flere bilder vil bli merget automatisk
+          </p>
+        )}
+      </div>
     </div>
   )
 }

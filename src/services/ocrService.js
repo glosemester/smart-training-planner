@@ -1,5 +1,6 @@
 /**
  * OCR Service for extracting workout data from images
+ * Supports both single and multiple images with automatic merging
  * Uses Anthropic Claude's vision capabilities via Netlify function
  */
 
@@ -16,42 +17,55 @@ async function fileToBase64(file) {
 }
 
 /**
- * Extract workout data from an image using AI OCR
- * @param {File|Blob} imageFile - The image file to analyze
- * @returns {Promise<Object>} Extracted workout data
+ * Extract workout data from one or multiple images using AI OCR
+ * If multiple images are provided, they will be analyzed and merged automatically
+ * @param {File|Blob|Array<File|Blob>} imageFiles - Single image or array of images
+ * @returns {Promise<Object>} Extracted (and possibly merged) workout data
  */
-export async function extractWorkoutData(imageFile) {
+export async function extractWorkoutData(imageFiles) {
   try {
-    // Validate file
-    if (!imageFile) {
-      throw new Error('No image file provided')
+    // Convert single file to array for uniform handling
+    const files = Array.isArray(imageFiles) ? imageFiles : [imageFiles]
+
+    if (files.length === 0) {
+      throw new Error('No image files provided')
     }
 
-    // Check file size (max 5MB)
-    const MAX_SIZE = 5 * 1024 * 1024
-    if (imageFile.size > MAX_SIZE) {
-      throw new Error('Bildet er for stort. Maks størrelse er 5MB.')
-    }
-
-    // Check file type
+    // Validate all files
+    const MAX_SIZE = 5 * 1024 * 1024 // 5MB per image
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
-    if (!validTypes.includes(imageFile.type)) {
-      throw new Error('Ugyldig bildeformat. Bruk JPEG, PNG eller WEBP.')
+
+    for (const file of files) {
+      if (!file) {
+        throw new Error('Invalid image file')
+      }
+
+      if (file.size > MAX_SIZE) {
+        throw new Error(`Bilde er for stort (${(file.size / 1024 / 1024).toFixed(1)}MB). Maks størrelse er 5MB per bilde.`)
+      }
+
+      if (!validTypes.includes(file.type)) {
+        throw new Error('Ugyldig bildeformat. Bruk JPEG, PNG eller WEBP.')
+      }
     }
 
-    // Convert to base64
-    const base64Image = await fileToBase64(imageFile)
+    // Convert all files to base64
+    const images = await Promise.all(
+      files.map(async (file) => ({
+        data: await fileToBase64(file),
+        type: file.type
+      }))
+    )
 
-    // Call Netlify function
+    console.log(`🖼️ Extracting workout data from ${images.length} image(s)`)
+
+    // Call Netlify function with images array
     const response = await fetch('/.netlify/functions/extract-workout-data', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        imageData: base64Image,
-        imageType: imageFile.type
-      })
+      body: JSON.stringify({ images })
     })
 
     if (!response.ok) {
@@ -63,8 +77,16 @@ export async function extractWorkoutData(imageFile) {
 
     // Check if data was detected
     if (!result.detected) {
-      throw new Error(result.message || 'Kunne ikke finne treningsdata i bildet')
+      throw new Error(result.message || 'Kunne ikke finne treningsdata i bildet/bildene')
     }
+
+    console.log('✅ Workout data extracted:', {
+      detected: result.detected,
+      confidence: result.confidence,
+      workoutType: result.workoutType,
+      images: images.length,
+      merged: result.dataSources ? `from ${result.dataSources.join(', ')}` : 'single source'
+    })
 
     return result
   } catch (error) {
