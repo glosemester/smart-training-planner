@@ -14,6 +14,8 @@ export default function TrainingCalendar() {
   const [selectedDate, setSelectedDate] = useState(null)
   const [showDayDetail, setShowDayDetail] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [draggedSession, setDraggedSession] = useState(null)
+  const [draggedPlan, setDraggedPlan] = useState(null)
 
   // Generate 6 months of dates
   const monthsToShow = useMemo(() => {
@@ -119,6 +121,67 @@ export default function TrainingCalendar() {
   const handleLogWorkout = () => {
     setShowDayDetail(false)
     navigate('/workouts/new')
+  }
+
+  const handleDragStart = (session, plan, e) => {
+    if (session.source === 'workout') return // Don't allow dragging completed workouts
+
+    setDraggedSession(session)
+    setDraggedPlan(plan)
+
+    // Add drag effect
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/html', e.target.innerHTML)
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDrop = async (targetDate, e) => {
+    e.preventDefault()
+
+    if (!draggedSession || !draggedPlan) return
+
+    try {
+      setLoading(true)
+
+      // Calculate the new day for the session
+      const newDay = format(targetDate, 'EEEE', { locale: nb }).toLowerCase()
+      const dayMap = {
+        'mandag': 'monday',
+        'tirsdag': 'tuesday',
+        'onsdag': 'wednesday',
+        'torsdag': 'thursday',
+        'fredag': 'friday',
+        'lørdag': 'saturday',
+        'søndag': 'sunday'
+      }
+
+      const englishDay = dayMap[newDay] || newDay
+
+      // Update the session with new day
+      await updatePlanSession(draggedPlan.id, draggedSession.id, {
+        day: englishDay,
+        movedBy: 'user',
+        movedAt: new Date()
+      })
+
+      console.log(`✅ Session moved to ${englishDay}`)
+    } catch (error) {
+      console.error('Failed to move session:', error)
+      alert('Kunne ikke flytte økten. Prøv igjen.')
+    } finally {
+      setLoading(false)
+      setDraggedSession(null)
+      setDraggedPlan(null)
+    }
+  }
+
+  const handleDragEnd = () => {
+    setDraggedSession(null)
+    setDraggedPlan(null)
   }
 
   const selectedSessions = selectedDate ? getSessionsForDate(selectedDate) : []
@@ -250,20 +313,20 @@ export default function TrainingCalendar() {
   return (
     <div className="min-h-screen bg-background pb-24 px-4 pt-6">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-6 animate-fade-in-up">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              <CalendarIcon size={28} className="text-primary" />
+              <CalendarIcon size={28} className="text-primary animate-pulse-subtle" />
               Treningskalender
             </h1>
             <p className="text-text-muted text-sm mt-1">
-              6 måneder fremover med planlagte og fullførte økter
+              6 måneder fremover • Dra for å flytte økter
             </p>
           </div>
           <button
             onClick={goToToday}
-            className="btn-secondary px-4 py-2 text-sm"
+            className="btn-secondary px-4 py-2 text-sm hover:scale-105 transition-transform"
           >
             I dag
           </button>
@@ -298,13 +361,13 @@ export default function TrainingCalendar() {
         {/* Completion Statistics */}
         <div className="grid grid-cols-3 gap-3">
           {/* Week completion */}
-          <div className="bg-background-secondary rounded-xl p-3 border border-white/5">
+          <div className="bg-background-secondary rounded-xl p-3 border border-white/5 hover:border-primary/30 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-primary/10">
             <div className="flex items-center gap-2 mb-2">
               <Target size={16} className="text-primary" />
               <span className="text-xs font-medium text-text-muted">Uke</span>
             </div>
             <div className="flex flex-col">
-              <span className="text-2xl font-bold text-white">{stats.weekRate}%</span>
+              <span className="text-2xl font-bold text-white animate-scale-up">{stats.weekRate}%</span>
               <span className="text-[10px] text-text-muted mt-0.5">
                 {stats.weekCompleted}/{stats.weekPlanned} økter
               </span>
@@ -312,13 +375,13 @@ export default function TrainingCalendar() {
           </div>
 
           {/* Month completion */}
-          <div className="bg-background-secondary rounded-xl p-3 border border-white/5">
+          <div className="bg-background-secondary rounded-xl p-3 border border-white/5 hover:border-secondary/30 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-secondary/10">
             <div className="flex items-center gap-2 mb-2">
               <TrendingUp size={16} className="text-secondary" />
               <span className="text-xs font-medium text-text-muted">Måned</span>
             </div>
             <div className="flex flex-col">
-              <span className="text-2xl font-bold text-white">{stats.monthRate}%</span>
+              <span className="text-2xl font-bold text-white animate-scale-up">{stats.monthRate}%</span>
               <span className="text-[10px] text-text-muted mt-0.5">
                 {stats.monthCompleted}/{stats.monthPlanned} økter
               </span>
@@ -326,13 +389,13 @@ export default function TrainingCalendar() {
           </div>
 
           {/* Streak */}
-          <div className="bg-background-secondary rounded-xl p-3 border border-white/5">
+          <div className="bg-background-secondary rounded-xl p-3 border border-white/5 hover:border-warning/30 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-warning/10">
             <div className="flex items-center gap-2 mb-2">
-              <Flame size={16} className="text-warning" />
+              <Flame size={16} className={`text-warning ${stats.currentStreak > 0 ? 'animate-pulse-subtle' : ''}`} />
               <span className="text-xs font-medium text-text-muted">Streak</span>
             </div>
             <div className="flex flex-col">
-              <span className="text-2xl font-bold text-white">{stats.currentStreak}</span>
+              <span className="text-2xl font-bold text-white animate-scale-up">{stats.currentStreak}</span>
               <span className="text-[10px] text-text-muted mt-0.5">
                 {stats.currentStreak === 1 ? 'dag' : 'dager'} (best: {stats.bestStreak})
               </span>
@@ -349,6 +412,12 @@ export default function TrainingCalendar() {
             monthDate={monthDate}
             getSessionsForDate={getSessionsForDate}
             onDayClick={handleDayClick}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onDragEnd={handleDragEnd}
+            plans={plans}
+            isDragging={!!draggedSession}
           />
         ))}
       </div>
@@ -368,7 +437,7 @@ export default function TrainingCalendar() {
   )
 }
 
-function MonthView({ monthDate, getSessionsForDate, onDayClick }) {
+function MonthView({ monthDate, getSessionsForDate, onDayClick, onDragStart, onDragOver, onDrop, onDragEnd, plans, isDragging }) {
   const monthStart = startOfMonth(monthDate)
   const monthEnd = endOfMonth(monthDate)
 
@@ -385,10 +454,13 @@ function MonthView({ monthDate, getSessionsForDate, onDayClick }) {
   }
 
   return (
-    <div className="bg-background-secondary rounded-2xl p-4 border border-white/5">
+    <div className="bg-background-secondary rounded-2xl p-4 border border-white/5 animate-fade-in-up hover:border-white/10 transition-colors">
       {/* Month header */}
-      <h2 className="text-lg font-bold text-white mb-4 capitalize">
+      <h2 className="text-lg font-bold text-white mb-4 capitalize flex items-center gap-2">
         {format(monthDate, 'MMMM yyyy', { locale: nb })}
+        <span className="text-xs font-normal text-text-muted">
+          ({days.length / 7} uker)
+        </span>
       </h2>
 
       {/* Weekday headers */}
@@ -420,6 +492,12 @@ function MonthView({ monthDate, getSessionsForDate, onDayClick }) {
                   isCurrentMonth={isCurrentMonth}
                   isToday={isCurrentDay}
                   onClick={() => onDayClick(day, sessions)}
+                  onDragStart={onDragStart}
+                  onDragOver={onDragOver}
+                  onDrop={onDrop}
+                  onDragEnd={onDragEnd}
+                  plans={plans}
+                  isDragging={isDragging}
                 />
               )
             })}
@@ -430,7 +508,7 @@ function MonthView({ monthDate, getSessionsForDate, onDayClick }) {
   )
 }
 
-function DayCell({ date, sessions, isCurrentMonth, isToday, onClick }) {
+function DayCell({ date, sessions, isCurrentMonth, isToday, onClick, onDragStart, onDragOver, onDrop, onDragEnd, plans, isDragging }) {
   const dayNumber = format(date, 'd')
 
   // Count sessions by status
@@ -438,14 +516,40 @@ function DayCell({ date, sessions, isCurrentMonth, isToday, onClick }) {
   const completed = sessions.filter(s => s.status === 'completed').length
   const total = sessions.length
 
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    onDragOver(e)
+  }
+
+  const handleDrop = (e) => {
+    e.stopPropagation()
+    onDrop(date, e)
+  }
+
+  const handleSessionDragStart = (session, e) => {
+    e.stopPropagation()
+
+    // Find the plan that contains this session
+    const plan = plans.find(p =>
+      p.sessions?.some(s => s.id === session.id)
+    )
+
+    if (plan && session.source === 'plan') {
+      onDragStart(session, plan, e)
+    }
+  }
+
   return (
     <div
       onClick={onClick}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
       className={`
-        relative aspect-square rounded-lg p-1 transition-all
+        relative aspect-square rounded-lg p-1 transition-all duration-300
         ${isCurrentMonth ? 'bg-background-tertiary' : 'bg-background-secondary/50'}
-        ${isToday ? 'ring-2 ring-primary' : 'border border-white/5'}
-        ${total > 0 ? 'hover:scale-105 cursor-pointer active:scale-95' : ''}
+        ${isToday ? 'ring-2 ring-primary animate-pulse-ring' : 'border border-white/5'}
+        ${total > 0 ? 'hover:scale-110 cursor-pointer active:scale-95 hover:shadow-lg' : ''}
+        ${isDragging && isCurrentMonth ? 'ring-2 ring-secondary/50 scale-110 bg-secondary/5 animate-pulse-ring' : ''}
       `}
     >
       {/* Day number */}
@@ -465,13 +569,18 @@ function DayCell({ date, sessions, isCurrentMonth, isToday, onClick }) {
           {sessions.slice(0, 3).map((session, idx) => {
             const workoutType = getWorkoutType(session.type)
             const isCompleted = session.status === 'completed'
+            const isDraggable = session.source === 'plan' && !isCompleted
 
             return (
               <div
                 key={idx}
+                draggable={isDraggable}
+                onDragStart={(e) => handleSessionDragStart(session, e)}
+                onDragEnd={onDragEnd}
                 className={`
-                  w-1 h-1 rounded-full
+                  w-1 h-1 rounded-full transition-all
                   ${isCompleted ? 'bg-success' : workoutType.color}
+                  ${isDraggable ? 'cursor-move hover:scale-150' : ''}
                 `}
                 title={session.title || workoutType.name}
               />
@@ -506,8 +615,8 @@ function DayDetailModal({ date, sessions, onClose, onMarkCompleted, onLogWorkout
   const completed = sessions.filter(s => s.status === 'completed')
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-background-secondary rounded-3xl w-full max-w-lg max-h-[80vh] overflow-y-auto border border-white/10 shadow-2xl pb-8">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in-up">
+      <div className="bg-background-secondary rounded-3xl w-full max-w-lg max-h-[80vh] overflow-y-auto border border-white/10 shadow-2xl pb-8 animate-slide-in-right">
         {/* Header */}
         <div className="sticky top-0 bg-background-secondary border-b border-white/10 p-4 flex items-center justify-between rounded-t-3xl">
           <div>
@@ -691,9 +800,9 @@ function SessionCard({ session, onMarkCompleted, loading, showCompleteButton }) 
         <button
           onClick={() => onMarkCompleted(session)}
           disabled={loading}
-          className="mt-3 w-full btn-primary py-2 text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="mt-3 w-full btn-primary py-2 text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition-transform"
         >
-          <CheckCircle size={16} />
+          <CheckCircle size={16} className={loading ? 'animate-spin' : ''} />
           {loading ? 'Markerer...' : 'Marker som fullført'}
         </button>
       )}
