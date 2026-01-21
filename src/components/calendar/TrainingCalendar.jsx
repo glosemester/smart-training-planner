@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, startOfWeek, endOfWeek, isSameMonth, isToday, isSameDay, isPast, differenceInDays } from 'date-fns'
 import { nb } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, Clock, MapPin, CheckCircle, Edit, TrendingUp, Target, Flame } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, Clock, MapPin, CheckCircle, Edit, TrendingUp, Target, Flame, Grid3x3, List } from 'lucide-react'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { getWorkoutType } from '../../data/workoutTypes'
 import { useNavigate } from 'react-router-dom'
@@ -28,6 +28,15 @@ export default function TrainingCalendar() {
       months.push(monthDate)
     }
     return months
+  }, [startDate])
+
+  // Generate week dates (for week view)
+  const weekDays = useMemo(() => {
+    const weekStart = startOfWeek(startDate, { weekStartsOn: 1 }) // Monday
+    return eachDayOfInterval({
+      start: weekStart,
+      end: endOfWeek(weekStart, { weekStartsOn: 1 })
+    })
   }, [startDate])
 
   // Get all sessions and workouts for a specific date
@@ -78,12 +87,28 @@ export default function TrainingCalendar() {
     setStartDate(new Date())
   }
 
-  const goToPreviousMonth = () => {
-    setStartDate(prev => addMonths(prev, -1))
+  const goToPrevious = () => {
+    if (viewMode === 'week') {
+      setStartDate(prev => {
+        const newDate = new Date(prev)
+        newDate.setDate(prev.getDate() - 7)
+        return newDate
+      })
+    } else {
+      setStartDate(prev => addMonths(prev, -1))
+    }
   }
 
-  const goToNextMonth = () => {
-    setStartDate(prev => addMonths(prev, 1))
+  const goToNext = () => {
+    if (viewMode === 'week') {
+      setStartDate(prev => {
+        const newDate = new Date(prev)
+        newDate.setDate(prev.getDate() + 7)
+        return newDate
+      })
+    } else {
+      setStartDate(prev => addMonths(prev, 1))
+    }
   }
 
   const handleDayClick = (date, sessions) => {
@@ -329,21 +354,49 @@ export default function TrainingCalendar() {
               Treningskalender
             </h1>
             <p className="text-text-muted text-sm mt-1">
-              6 måneder fremover • Dra for å flytte økter
+              {viewMode === 'month' ? '6 måneder fremover' : 'Ukevisning'} • Dra for å flytte økter
             </p>
           </div>
-          <button
-            onClick={goToToday}
-            className="btn-secondary px-4 py-2 text-sm hover:scale-105 transition-transform"
-          >
-            I dag
-          </button>
+          <div className="flex items-center gap-2">
+            {/* View toggle */}
+            <div className="bg-background-secondary rounded-lg p-1 flex gap-1">
+              <button
+                onClick={() => setViewMode('month')}
+                className={`p-2 rounded transition-all duration-200 ${
+                  viewMode === 'month'
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'text-text-muted hover:text-text-secondary'
+                }`}
+                aria-label="Månedsvisning"
+              >
+                <Grid3x3 size={16} />
+              </button>
+              <button
+                onClick={() => setViewMode('week')}
+                className={`p-2 rounded transition-all duration-200 ${
+                  viewMode === 'week'
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'text-text-muted hover:text-text-secondary'
+                }`}
+                aria-label="Ukevisning"
+              >
+                <List size={16} />
+              </button>
+            </div>
+
+            <button
+              onClick={goToToday}
+              className="btn-secondary px-4 py-2 text-sm hover:scale-105 transition-transform"
+            >
+              I dag
+            </button>
+          </div>
         </div>
 
         {/* Navigation */}
         <div className="flex items-center justify-between mb-4">
           <button
-            onClick={goToPreviousMonth}
+            onClick={goToPrevious}
             className="p-2 rounded-lg bg-background-secondary hover:bg-background-tertiary transition-colors"
           >
             <ChevronLeft size={20} className="text-text-secondary" />
@@ -351,15 +404,21 @@ export default function TrainingCalendar() {
 
           <div className="text-center">
             <p className="text-lg font-semibold text-white">
-              {format(startDate, 'MMMM yyyy', { locale: nb })}
+              {viewMode === 'week'
+                ? `Uke ${format(weekDays[0], 'w', { locale: nb })} - ${format(weekDays[0], 'MMM yyyy', { locale: nb })}`
+                : format(startDate, 'MMMM yyyy', { locale: nb })
+              }
             </p>
             <p className="text-xs text-text-muted">
-              Viser 6 måneder
+              {viewMode === 'week'
+                ? `${format(weekDays[0], 'd. MMM', { locale: nb })} - ${format(weekDays[6], 'd. MMM', { locale: nb })}`
+                : 'Viser 6 måneder'
+              }
             </p>
           </div>
 
           <button
-            onClick={goToNextMonth}
+            onClick={goToNext}
             className="p-2 rounded-lg bg-background-secondary hover:bg-background-tertiary transition-colors"
           >
             <ChevronRight size={20} className="text-text-secondary" />
@@ -412,23 +471,33 @@ export default function TrainingCalendar() {
         </div>
       </div>
 
-      {/* Calendar Grid - 6 months */}
-      <div className="space-y-8">
-        {monthsToShow.map((monthDate, monthIndex) => (
-          <MonthView
-            key={monthIndex}
-            monthDate={monthDate}
-            getSessionsForDate={getSessionsForDate}
-            onDayClick={handleDayClick}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-            onDragEnd={handleDragEnd}
-            plans={plans}
-            isDragging={!!draggedSession}
-          />
-        ))}
-      </div>
+      {/* Calendar Grid */}
+      {viewMode === 'month' ? (
+        <div className="space-y-8">
+          {monthsToShow.map((monthDate, monthIndex) => (
+            <MonthView
+              key={monthIndex}
+              monthDate={monthDate}
+              getSessionsForDate={getSessionsForDate}
+              onDayClick={handleDayClick}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              onDragEnd={handleDragEnd}
+              plans={plans}
+              isDragging={!!draggedSession}
+            />
+          ))}
+        </div>
+      ) : (
+        <WeekView
+          weekDays={weekDays}
+          getSessionsForDate={getSessionsForDate}
+          onDayClick={handleDayClick}
+          onMarkCompleted={handleMarkCompleted}
+          loading={loading}
+        />
+      )}
 
       {/* Day Detail Modal */}
       {showDayDetail && selectedDate && (
@@ -443,6 +512,111 @@ export default function TrainingCalendar() {
       )}
       </div>
     </>
+  )
+}
+
+function WeekView({ weekDays, getSessionsForDate, onDayClick, onMarkCompleted, loading }) {
+  return (
+    <div className="space-y-3">
+      {weekDays.map((day, index) => {
+        const sessions = getSessionsForDate(day)
+        const dayIsToday = isToday(day)
+        const dayIsPast = isPast(day) && !dayIsToday
+
+        return (
+          <div
+            key={index}
+            className={`
+              bg-background-secondary rounded-2xl p-4 border
+              transition-all duration-300
+              hover:scale-[1.02] hover:shadow-lg
+              ${dayIsToday
+                ? 'border-primary shadow-lg shadow-primary/20'
+                : 'border-white/5 hover:border-white/10'
+              }
+              animate-fade-in-up
+            `}
+            style={{ animationDelay: `${index * 50}ms` }}
+          >
+            {/* Day header */}
+            <div className="flex items-center justify-between mb-3 pb-3 border-b border-white/5">
+              <div>
+                <h3 className={`font-semibold ${dayIsToday ? 'text-primary' : 'text-white'}`}>
+                  {format(day, 'EEEE', { locale: nb })}
+                </h3>
+                <p className="text-sm text-text-muted">
+                  {format(day, 'd. MMMM yyyy', { locale: nb })}
+                </p>
+              </div>
+              {dayIsToday && (
+                <div className="bg-primary/20 text-primary px-3 py-1 rounded-full text-xs font-medium">
+                  I dag
+                </div>
+              )}
+            </div>
+
+            {/* Sessions for this day */}
+            {sessions.length > 0 ? (
+              <div className="space-y-2">
+                {sessions.map((session, idx) => {
+                  const workoutType = getWorkoutType(session.type)
+                  const isCompleted = session.status === 'completed'
+                  const canComplete = session.source === 'plan' && !isCompleted && (dayIsPast || dayIsToday)
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`
+                        p-3 rounded-xl border transition-all
+                        ${isCompleted
+                          ? 'bg-success/5 border-success/20'
+                          : 'bg-background-tertiary border-white/10 hover:border-white/20'
+                        }
+                      `}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`text-2xl flex-shrink-0`}>
+                          {workoutType.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold text-white text-sm">
+                            {session.title || workoutType.name}
+                          </h4>
+                          <p className={`text-xs ${isCompleted ? 'text-success' : 'text-text-muted'}`}>
+                            {workoutType.name}
+                            {session.duration_minutes && ` • ${session.duration_minutes} min`}
+                          </p>
+                          {session.description && (
+                            <p className="text-sm text-text-secondary mt-1 line-clamp-2">
+                              {session.description}
+                            </p>
+                          )}
+
+                          {/* Complete button */}
+                          {canComplete && (
+                            <button
+                              onClick={() => onMarkCompleted(session)}
+                              disabled={loading}
+                              className="mt-2 btn-primary py-1.5 px-3 text-xs hover:scale-105 transition-transform"
+                            >
+                              {loading ? 'Markerer...' : '✓ Marker som fullført'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-text-muted text-sm">
+                <p>Ingen økter planlagt</p>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
