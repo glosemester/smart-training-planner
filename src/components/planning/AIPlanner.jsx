@@ -3,9 +3,11 @@ import { useAuth } from '../../hooks/useAuth'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { generateTrainingPlan } from '../../services/aiService'
 import { getWorkoutType } from '../../data/workoutTypes'
-import { Brain, Sparkles, RefreshCw, Check, Clock, MapPin, Edit2, Trash2, Plus, GripVertical } from 'lucide-react'
+import { Brain, Sparkles, RefreshCw, Check, Clock, MapPin, Edit2, Trash2, Plus, GripVertical, Image as ImageIcon } from 'lucide-react'
 import PlanningWizard from './PlanningWizard'
 import PlanAnalysis from './PlanAnalysis'
+import ImageUpload from '../common/ImageUpload'
+import { scanWorkout } from '../../services/workoutScanService'
 import {
   DndContext,
   closestCenter,
@@ -598,6 +600,9 @@ function AddSessionModal({ day, onSave, onCancel }) {
     description: '',
     duration_minutes: 60
   })
+  const [images, setImages] = useState([])
+  const [scanning, setScanning] = useState(false)
+  const [scanError, setScanError] = useState(null)
 
   const dayNames = {
     monday: 'Mandag',
@@ -609,18 +614,69 @@ function AddSessionModal({ day, onSave, onCancel }) {
     sunday: 'Søndag'
   }
 
+  // Handle image upload and OCR
+  const handleImagesChange = async (newImages) => {
+    setImages(newImages)
+    setScanError(null)
+
+    // Only scan if there are new images and we haven't scanned yet
+    if (newImages.length > 0 && !scanning && !formData.title) {
+      setScanning(true)
+      try {
+        const result = await scanWorkout(newImages)
+
+        // Auto-fill form with OCR results
+        setFormData({
+          type: result.type || formData.type,
+          title: result.title || formData.title,
+          description: result.description || formData.description,
+          duration_minutes: result.duration_minutes || formData.duration_minutes
+        })
+      } catch (err) {
+        console.error('OCR scan error:', err)
+        setScanError('Kunne ikke lese bildet automatisk. Fyll inn feltene manuelt.')
+      } finally {
+        setScanning(false)
+      }
+    }
+  }
+
   const handleSubmit = (e) => {
     e.preventDefault()
     onSave(day, formData)
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-background-primary rounded-xl max-w-md w-full p-6">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-background-primary rounded-xl max-w-md w-full p-6 my-4">
         <h2 className="text-xl font-bold text-text-primary mb-4">
           Legg til økt - {dayNames[day]}
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Image Upload */}
+          <div>
+            <label className="input-label flex items-center gap-2">
+              <ImageIcon size={16} />
+              Last opp skjermbilde fra whiteboard/trening (valgfritt)
+            </label>
+            <ImageUpload
+              images={images}
+              onImagesChange={handleImagesChange}
+              maxImages={3}
+            />
+            {scanning && (
+              <div className="mt-2 p-3 bg-secondary/10 border border-secondary/20 rounded-xl text-secondary text-sm flex items-center gap-2">
+                <div className="spinner-sm" />
+                Leser treningsøkt fra bilde...
+              </div>
+            )}
+            {scanError && (
+              <div className="mt-2 p-3 bg-warning/10 border border-warning/20 rounded-xl text-warning text-sm">
+                {scanError}
+              </div>
+            )}
+          </div>
+
           <div>
             <label htmlFor="add-type" className="input-label">Type</label>
             <select
@@ -675,7 +731,7 @@ function AddSessionModal({ day, onSave, onCancel }) {
             <button type="button" onClick={onCancel} className="btn-outline flex-1">
               Avbryt
             </button>
-            <button type="submit" className="btn-primary flex-1">
+            <button type="submit" className="btn-primary flex-1" disabled={scanning}>
               Legg til
             </button>
           </div>

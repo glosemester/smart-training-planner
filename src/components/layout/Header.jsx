@@ -10,10 +10,10 @@ export default function Header() {
         {/* Logo/Tittel */}
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary-light flex items-center justify-center">
-            <span className="text-white font-bold text-sm">ST</span>
+            <span className="text-white font-bold text-sm">RC</span>
           </div>
           <h1 className="font-heading font-bold text-lg text-text-primary">
-            Training
+            RunCoach
           </h1>
         </div>
 

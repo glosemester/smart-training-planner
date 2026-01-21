@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import DailySummaryCard from './DailySummaryCard'
 import NutritionWidget from './NutritionWidget'
+import DateTimeDisplay from './DateTimeDisplay'
 
 export default function Dashboard() {
   const { userProfile } = useAuth()
@@ -103,6 +104,9 @@ export default function Dashboard() {
           {getGreetingMessage()}
         </p>
       </div>
+
+      {/* Real-time Date & Time */}
+      <DateTimeDisplay />
 
       {/* AI Daily Summary */}
       <DailySummaryCard />
