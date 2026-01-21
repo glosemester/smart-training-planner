@@ -400,10 +400,10 @@ function DayColumn({ day, sessions, onEdit, onDelete, onAddSession, isEditable }
         {isEditable && (
           <button
             onClick={onAddSession}
-            className="text-xs text-primary hover:text-primary-dark flex items-center gap-1"
+            className="px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors relative z-10"
             aria-label={`Legg til økt på ${dayNames[day]}`}
           >
-            <Plus size={14} />
+            <Plus size={16} />
             Legg til
           </button>
         )}

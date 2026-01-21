@@ -5,33 +5,60 @@ export const config = {
   timeout: 30 // 30 seconds for OCR processing
 }
 
-const OCR_SYSTEM_PROMPT = `Du er en AI-assistent som ekstraerer treningsdata fra bilder. Du kan lese bilder fra treningsapper som Garmin, Strava, Apple Watch, etc., og ekstrahere relevant treningsinformasjon.
+const OCR_SYSTEM_PROMPT = `Du er en AI-assistent som ekstraerer treningsdata fra bilder. Du kan lese:
+1. Bilder fra treningsapper (Garmin, Strava, Apple Watch, etc.)
+2. Whiteboards/tavler fra CrossFit/Hyrox-sentre (håndskrevet eller marker)
+3. Screenshots av treningsprogrammer
 
 Din oppgave er å:
 1. Identifisere type treningsøkt (løping, styrke, Hyrox, CrossFit, etc.)
 2. Ekstrahere nøkkeldata som distanse, tid, tempo, puls, høydemeter, RPE, etc.
-3. Returnere data i et strukturert JSON-format
+3. For CrossFit/Hyrox whiteboards: Parse WOD-format (AMRAP, EMOM, For Time, Chipper, etc.) og estimer RPE
+4. Returnere data i et strukturert JSON-format
 
-Output-format: Returner alltid en strukturert JSON med følgende format:
+## CrossFit/Hyrox Whiteboard-gjenkjenning:
+- Gjenkjenn vanlige formater: WOD (Workout of the Day), AMRAP, EMOM, For Time, Tabata, Chipper
+- Ekstraher øvelser, repetisjoner, vekter, distanser, tidsrammer
+- Estimer RPE basert på:
+  * Volum (antall runder/repetisjoner)
+  * Intensitet (tung vekt, høy hastighet, korte pauser)
+  * Varighet (lengre økter = lavere intensitet per runde)
+  * Øvelseskompleksitet (tekniske løft = høyere intensitet)
+  * Kombinasjoner (mange ulike bevegelser = høyere)
+
+RPE-estimering guide:
+- RPE 3-4: Lett teknikk/recovery, lav intensitet, god pause
+- RPE 5-6: Moderat tempo, kontrollert, medium volum
+- RPE 7-8: Høy intensitet, tung vekt ELLER høyt tempo, begrenset pause
+- RPE 9-10: Max effort, tung vekt OG høyt tempo, minimal pause, lange økter
+
+## Output-format:
+Returner alltid en strukturert JSON med følgende format:
 {
   "detected": true/false,  // Om du klarte å identifisere treningsdata
   "confidence": "high|medium|low",  // Hvor sikker du er på dataene
   "workoutType": "easy_run|tempo|interval|long_run|hyrox|crossfit|strength|recovery|other",
   "data": {
-    "title": "string - kort beskrivende tittel",
+    "title": "string - kort beskrivende tittel (f.eks. 'AMRAP 20min' eller 'Hyrox Simulation')",
     "date": "YYYY-MM-DD",  // Ekstrahert dato hvis synlig
-    "duration": number,  // Varighet i minutter
+    "duration": number,  // Varighet i minutter (estimer basert på WOD-format hvis ikke oppgitt)
     "distance": number,  // Distanse i km (for løping)
     "avgPace": "MM:SS",  // Gjennomsnittlig tempo (for løping)
     "avgHR": number,  // Gjennomsnittlig puls
     "maxHR": number,  // Maks puls
     "elevation": number,  // Høydemeter
     "surface": "road|trail|track|treadmill",  // Underlag hvis synlig
-    "rpe": number,  // RPE 1-10 hvis synlig eller estimert
-    "notes": "string - eventuelle ekstra notater eller observasjoner"
+    "rpe": number,  // RPE 1-10 - ALLTID estimer dette for CrossFit/Hyrox basert på workout-intensitet
+    "notes": "string - full workout-beskrivelse med øvelser, reps, vekter, format"
   },
   "suggestions": "string - forslag til brukeren om data som bør verifiseres eller legges til manuelt"
 }
+
+## Viktig for whiteboards:
+- Håndskrift kan være uleselig - gjør ditt beste og nevn usikkerhet i suggestions
+- Inkluder HELE workout-beskrivelsen i notes-feltet
+- Estimer ALLTID RPE for CrossFit/Hyrox-økter basert på intensitet
+- Estimer varighet hvis ikke oppgitt (typisk 10-60 min for CrossFit WODs)
 
 Vær konservativ: Hvis du er usikker på en verdi, sett den til null og nevn det i suggestions.
 Kommuniser på norsk i suggestions og notes.
@@ -91,15 +118,24 @@ export const handler = async (event) => {
     const prompt = `
 Analyser dette bildet av en treningsøkt og ekstraher all relevant treningsdata.
 
+Dette kan være:
+1. Screenshot fra treningsapp (Garmin, Strava, Apple Watch, etc.)
+2. Whiteboard/tavle fra CrossFit/Hyrox-senter med WOD (Workout of the Day)
+3. Treningsprogram eller workout-plan
+
 Se etter:
-- Type trening (løping, sykling, styrke, etc.)
-- Distanse
-- Varighet/tid
-- Tempo/hastighet
+- Type trening (løping, CrossFit, Hyrox, styrke, etc.)
+- For whiteboards: WOD-format (AMRAP, EMOM, For Time, etc.), øvelser, reps, vekter
+- Distanse, varighet/tid, tempo/hastighet
 - Puls (snitt og maks)
 - Høydemeter/elevation
 - Dato
-- Eventuelle notater eller spesielle observasjoner
+- Estimer RPE (1-10) basert på workout-intensitet hvis dette er CrossFit/Hyrox
+
+VIKTIG: For CrossFit/Hyrox whiteboards:
+- Inkluder full workout-beskrivelse i notes-feltet
+- Estimer RPE basert på volum, intensitet, varighet og kompleksitet
+- Estimer varighet hvis ikke oppgitt (typisk 10-60 min)
 
 Returner dataene i JSON-formatet spesifisert i system-prompten.
 `

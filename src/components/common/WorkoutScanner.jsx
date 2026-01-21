@@ -80,7 +80,7 @@ export default function WorkoutScanner({ onDataExtracted, onClose }) {
               Skann treningsdata
             </h2>
             <p className="text-sm text-text-muted mt-0.5">
-              Ta bilde av økt fra app eller klokke
+              Ta bilde av treningsapp eller whiteboard fra CrossFit/Hyrox
             </p>
           </div>
           <button
@@ -204,8 +204,9 @@ export default function WorkoutScanner({ onDataExtracted, onClose }) {
             <p className="font-medium text-secondary mb-1">Tips:</p>
             <ul className="space-y-1 text-xs">
               <li>• Sørg for at bildet er tydelig og godt opplyst</li>
-              <li>• Inkluder treningssammendrag med nøkkeltall</li>
               <li>• Fungerer med Garmin, Strava, Apple Watch, etc.</li>
+              <li>• Whiteboards: Ta bilde av hele WOD med øvelser og reps</li>
+              <li>• AI estimerer RPE automatisk for CrossFit/Hyrox</li>
               <li>• Du kan redigere dataene etter skanning</li>
             </ul>
           </div>
