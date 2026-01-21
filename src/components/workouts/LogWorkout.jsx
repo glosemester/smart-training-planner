@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { WORKOUT_TYPES, RPE_SCALE, RUNNING_SURFACES } from '../../data/workoutTypes'
 import { uploadWorkoutImage } from '../../services/imageService'
-import { ArrowLeft, Save, Scan } from 'lucide-react'
+import { ArrowLeft, Save, Scan, Plus, Trash2 } from 'lucide-react'
 import ImageUpload from '../common/ImageUpload'
 import WorkoutScanner from '../common/WorkoutScanner'
 
@@ -41,6 +41,7 @@ export default function LogWorkout() {
 
   const selectedType = WORKOUT_TYPES[formData.type]
   const isRunning = selectedType?.category === 'running'
+  const isStrength = selectedType?.category === 'strength'
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -50,6 +51,38 @@ export default function LogWorkout() {
     setFormData(prev => ({
       ...prev,
       running: { ...prev.running, [field]: value }
+    }))
+  }
+
+  const handleAddExercise = () => {
+    setFormData(prev => ({
+      ...prev,
+      strength: {
+        exercises: [
+          ...prev.strength.exercises,
+          { name: '', sets: '', reps: '', weight: '' }
+        ]
+      }
+    }))
+  }
+
+  const handleExerciseChange = (index, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      strength: {
+        exercises: prev.strength.exercises.map((ex, i) =>
+          i === index ? { ...ex, [field]: value } : ex
+        )
+      }
+    }))
+  }
+
+  const handleRemoveExercise = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      strength: {
+        exercises: prev.strength.exercises.filter((_, i) => i !== index)
+      }
     }))
   }
 
@@ -147,6 +180,16 @@ export default function LogWorkout() {
           maxHR: parseInt(formData.running.maxHR) || null,
           elevation: parseInt(formData.running.elevation) || 0,
           surface: formData.running.surface
+        } : null,
+        strength: isStrength ? {
+          exercises: formData.strength.exercises
+            .filter(ex => ex.name.trim())
+            .map(ex => ({
+              name: ex.name,
+              sets: parseInt(ex.sets) || 0,
+              reps: ex.reps || '',
+              weight: parseFloat(ex.weight) || 0
+            }))
         } : null,
         source: 'manual'
       }
@@ -359,6 +402,87 @@ export default function LogWorkout() {
                 </select>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Styrke-spesifikke felt (Hyrox, CrossFit, Styrke) */}
+        {isStrength && (
+          <div className="space-y-4 p-4 bg-strength/10 rounded-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium text-strength">Øvelser</h3>
+              <button
+                type="button"
+                onClick={handleAddExercise}
+                className="btn-secondary text-sm py-2 px-3 flex items-center gap-1"
+              >
+                <Plus size={16} />
+                Legg til øvelse
+              </button>
+            </div>
+
+            {formData.strength.exercises.length === 0 ? (
+              <p className="text-text-muted text-sm text-center py-4">
+                Ingen øvelser lagt til. Klikk "Legg til øvelse" for å registrere vekter.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {formData.strength.exercises.map((exercise, index) => (
+                  <div key={index} className="p-3 bg-background-tertiary rounded-lg space-y-3">
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="text"
+                        value={exercise.name}
+                        onChange={(e) => handleExerciseChange(index, 'name', e.target.value)}
+                        placeholder="Øvelse (f.eks. Deadlift)"
+                        className="input flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveExercise(index)}
+                        className="p-2 rounded-lg bg-error/20 hover:bg-error/30 transition-colors"
+                        aria-label="Fjern øvelse"
+                      >
+                        <Trash2 size={18} className="text-error" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="input-label text-xs">Sett</label>
+                        <input
+                          type="number"
+                          value={exercise.sets}
+                          onChange={(e) => handleExerciseChange(index, 'sets', e.target.value)}
+                          placeholder="3"
+                          className="input text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="input-label text-xs">Reps</label>
+                        <input
+                          type="text"
+                          value={exercise.reps}
+                          onChange={(e) => handleExerciseChange(index, 'reps', e.target.value)}
+                          placeholder="10"
+                          className="input text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="input-label text-xs">Vekt (kg)</label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          value={exercise.weight}
+                          onChange={(e) => handleExerciseChange(index, 'weight', e.target.value)}
+                          placeholder="60"
+                          className="input text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
