@@ -15,6 +15,17 @@ Viktige prinsipper du følger:
 - Balanse: Kombiner løping med styrke uten overtrening
 - Individualitet: Tilpass til personens mål, tid og preferanser
 
+**ULTRAMARATHON-SPESIFIKT (50+ km):**
+For ultramarathon-distanser følger du disse ekstra prinsippene:
+- Back-to-back long runs: Lange økter på fredag/lørdag eller lørdag/søndag for å trene tretthet
+- Høyere ukentlig volum: Bygg opp til 80-120+ km per uke for 50-100 km løp
+- Lengre long runs: Opp til 3-5 timer for de lengste øktene
+- Fokus på utholdenhet fremfor hastighet: Mer Z1-Z2, mindre høyintensitet
+- Terrengtrening: Prioriter trail/terrengløp hvis mulig
+- Ernæring og væske: Øv på fueling under lange økter
+- Lengre taper: 2-3 uker taper for ultramarathon
+- Mental trening: Inkluder tidvis kjedelige/monotone lange økter for mental styrke
+
 Du kommuniserer på norsk og gir konkrete, praktiske råd.
 
 Output-format: Returner alltid en strukturert JSON med følgende format:
@@ -220,14 +231,24 @@ function buildUserPrompt(userData) {
     const today = new Date()
     const weeksUntilRace = Math.ceil((raceDate - today) / (7 * 24 * 60 * 60 * 1000))
 
+    // Handle custom distance
+    const distanceDisplay = goal.distance === 'custom' && goal.customDistance
+      ? `${goal.customDistance} km (custom)`
+      : goal.distance
+
+    // Check if ultramarathon (50+ km)
+    const isUltra = goal.distance === '50km' || goal.distance === '65km' || goal.distance === '100km' ||
+                    (goal.distance === 'custom' && parseFloat(goal.customDistance) >= 50)
+
     goalInfo = `
 **KONKURRANSEMÅL:**
-- Distanse: ${goal.distance}
+- Distanse: ${distanceDisplay}${isUltra ? ' (ULTRAMARATHON)' : ''}
 - Dato: ${goal.date}
 - Uker til konkurranse: ${weeksUntilRace}
 ${goal.goalTime ? `- Målsetting: ${goal.goalTime}` : ''}
 
-VIKTIG: Dette er uke ${weeksUntilRace > 12 ? 'base building' : weeksUntilRace > 4 ? 'build-up' : weeksUntilRace > 1 ? 'peak' : 'taper'} fase.`
+VIKTIG: Dette er uke ${weeksUntilRace > 12 ? 'base building' : weeksUntilRace > 4 ? 'build-up' : weeksUntilRace > 1 ? 'peak' : 'taper'} fase.
+${isUltra ? 'Dette er en ULTRAMARATHON - følg ultramarathon-spesifikke prinsipper!' : ''}`
   } else {
     goalInfo = `**MÅL:** ${goal.type === 'general_fitness' ? 'Generell form' : goal.type === 'distance' ? 'Løpe lengre distanser' : goal.type === 'speed' ? 'Bli raskere' : 'Ikke spesifisert'}`
   }

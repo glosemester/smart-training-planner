@@ -137,6 +137,12 @@ export default function PlanningWizard({ onComplete, onCancel }) {
     const answer = answers[step.id]
     if (!answer) return false
     if (step.type === 'multiselect') return answer.length > 0
+    if (step.type === 'race_details') {
+      // Krev dato og distanse
+      if (!answer.date || !answer.distance) return false
+      // Hvis custom distanse, krev også customDistance
+      if (answer.distance === 'custom' && !answer.customDistance) return false
+    }
     return true
   }
 
@@ -296,9 +302,30 @@ export default function PlanningWizard({ onComplete, onCancel }) {
                 <option value="10km">10 km</option>
                 <option value="half">Halvmaraton (21.1 km)</option>
                 <option value="full">Maraton (42.2 km)</option>
+                <option value="50km">Ultramaraton 50 km</option>
+                <option value="65km">Ultramaraton 65 km</option>
+                <option value="100km">Ultramaraton 100 km</option>
                 <option value="hyrox">Hyrox</option>
+                <option value="custom">Annen distanse</option>
               </select>
             </div>
+
+            {answers[step.id]?.distance === 'custom' && (
+              <div>
+                <label htmlFor="custom-distance" className="input-label">Spesifiser distanse (km)</label>
+                <input
+                  id="custom-distance"
+                  type="number"
+                  step="0.1"
+                  min="1"
+                  placeholder="F.eks: 80"
+                  value={answers[step.id]?.customDistance || ''}
+                  onChange={(e) => updateAnswer(step.id, { ...answers[step.id], customDistance: e.target.value })}
+                  className="input"
+                  aria-required="true"
+                />
+              </div>
+            )}
 
             <div>
               <label htmlFor="race-goal-time" className="input-label">Målsetting (valgfritt)</label>
