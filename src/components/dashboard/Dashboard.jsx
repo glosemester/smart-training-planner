@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { getWorkoutType } from '../../data/workoutTypes'
-import { format, isToday, isTomorrow, isYesterday, startOfWeek, endOfWeek } from 'date-fns'
+import { format, isToday, isTomorrow, isYesterday, startOfWeek, endOfWeek, differenceInDays } from 'date-fns'
 import { nb } from 'date-fns/locale'
 import {
   Calendar,
@@ -12,11 +12,15 @@ import {
   MapPin,
   ChevronRight,
   Flame,
-  Target
+  Target,
+  Zap,
+  Award,
+  Activity
 } from 'lucide-react'
 import DailySummaryCard from './DailySummaryCard'
 import NutritionWidget from './NutritionWidget'
 import DateTimeDisplay from './DateTimeDisplay'
+import VitalGoals from './VitalGoals'
 
 export default function Dashboard() {
   const { userProfile } = useAuth()
@@ -93,114 +97,205 @@ export default function Dashboard() {
 
   const firstName = userProfile?.displayName?.split(' ')[0] || 'der'
 
+  // Beregn streak (påfølgende dager med trening)
+  const currentStreak = useMemo(() => {
+    if (workouts.length === 0) return 0
+
+    let streak = 0
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    // Sorter workouts etter dato (nyeste først)
+    const sortedWorkouts = [...workouts].sort((a, b) => new Date(b.date) - new Date(a.date))
+
+    // Sjekk om det er en workout i dag eller i går
+    const lastWorkoutDate = new Date(sortedWorkouts[0].date)
+    lastWorkoutDate.setHours(0, 0, 0, 0)
+    const daysSinceLastWorkout = differenceInDays(today, lastWorkoutDate)
+
+    if (daysSinceLastWorkout > 1) return 0
+
+    // Tell påfølgende dager
+    let checkDate = new Date(today)
+    if (daysSinceLastWorkout === 1) {
+      checkDate.setDate(checkDate.getDate() - 1)
+    }
+
+    for (let i = 0; i < sortedWorkouts.length; i++) {
+      const workoutDate = new Date(sortedWorkouts[i].date)
+      workoutDate.setHours(0, 0, 0, 0)
+
+      if (workoutDate.getTime() === checkDate.getTime()) {
+        streak++
+        checkDate.setDate(checkDate.getDate() - 1)
+      } else if (workoutDate < checkDate) {
+        break
+      }
+    }
+
+    return streak
+  }, [workouts])
+
+  // Ukesmål progress (antar 4-5 økter per uke som mål)
+  const weeklyGoal = 5
+  const weekProgress = Math.min((weekStats.workouts / weeklyGoal) * 100, 100)
+
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Greeting */}
-      <div>
-        <h1 className="font-heading text-2xl font-bold text-text-primary">
-          Hei, {firstName}! 👋
-        </h1>
-        <p className="text-text-secondary mt-1">
-          {getGreetingMessage()}
-        </p>
+    <div className="space-y-6 animate-fade-in pb-8">
+      {/* Hero Section */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary-dark to-secondary p-6 text-white">
+        <div className="relative z-10">
+          <p className="text-sm opacity-90 mb-1">
+            {format(new Date(), 'EEEE d. MMMM', { locale: nb })}
+          </p>
+          <h1 className="font-heading text-3xl font-bold mb-2">
+            Hei, {firstName}! 👋
+          </h1>
+          <p className="text-white/90 mb-6">
+            {getGreetingMessage()}
+          </p>
+
+          {/* Quick stats */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 text-center">
+              <Flame size={20} className="mx-auto mb-1" />
+              <p className="text-2xl font-bold">{currentStreak}</p>
+              <p className="text-xs opacity-80">Dager streak</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 text-center">
+              <Activity size={20} className="mx-auto mb-1" />
+              <p className="text-2xl font-bold">{weekStats.workouts}</p>
+              <p className="text-xs opacity-80">Økter denne uke</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 text-center">
+              <Award size={20} className="mx-auto mb-1" />
+              <p className="text-2xl font-bold">{monthStats.totalWorkouts}</p>
+              <p className="text-xs opacity-80">Økter i mnd</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Decorative elements */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full -ml-24 -mb-24" />
       </div>
 
-      {/* Real-time Date & Time */}
-      <DateTimeDisplay />
+      {/* Ukens fremgang */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="font-heading font-semibold text-text-primary dark:text-text-primary">
+              Ukens fremgang
+            </h3>
+            <p className="text-sm text-text-muted dark:text-text-muted">
+              {weekStats.workouts} av {weeklyGoal} økter fullført
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-2xl font-heading font-bold text-primary">
+              {Math.round(weekProgress)}%
+            </p>
+          </div>
+        </div>
 
-      {/* AI Daily Summary */}
-      <DailySummaryCard />
+        {/* Progress bar */}
+        <div className="w-full h-3 bg-gray-200 dark:bg-white/5 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-primary to-primary-light rounded-full transition-all duration-500"
+            style={{ width: `${weekProgress}%` }}
+          />
+        </div>
 
-      {/* Neste økt */}
+        {/* Detailed stats */}
+        <div className="grid grid-cols-3 gap-2 mt-4">
+          <div className="text-center">
+            <p className="text-lg font-bold text-text-primary dark:text-text-primary">
+              {weekStats.runningKm}
+            </p>
+            <p className="text-xs text-text-muted dark:text-text-muted">km løpt</p>
+          </div>
+          <div className="text-center border-x border-gray-200 dark:border-white/10">
+            <p className="text-lg font-bold text-text-primary dark:text-text-primary">
+              {weekStats.hours}
+            </p>
+            <p className="text-xs text-text-muted dark:text-text-muted">timer trent</p>
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-bold text-text-primary dark:text-text-primary">
+              {weekStats.strengthSessions}
+            </p>
+            <p className="text-xs text-text-muted dark:text-text-muted">styrkeøkter</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Vital Goals */}
+      <VitalGoals />
+
+      {/* Neste planlagte økt */}
       {nextWorkout && (
-        <Link to="/plan" className="block">
-          <div className="card bg-gradient-to-br from-primary/20 to-primary/5 border-primary/20">
+        <Link to="/plan" className="block group">
+          <div className="card bg-gradient-to-br from-secondary/10 to-secondary/5 border-secondary/20 hover:scale-[1.02] transition-all duration-200">
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className="text-secondary" size={18} />
+              <p className="text-xs text-secondary font-medium uppercase tracking-wide">
+                {nextWorkout.isToday ? '🔥 I dag' : nextWorkout.isTomorrow ? 'I morgen' : `Om ${nextWorkout.daysAway} dager`}
+              </p>
+            </div>
             <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs text-primary font-medium uppercase tracking-wide">
-                  {nextWorkout.isToday ? 'I dag' : nextWorkout.isTomorrow ? 'I morgen' : `Om ${nextWorkout.daysAway} dager`}
-                </p>
-                <h3 className="font-heading font-bold text-lg text-text-primary mt-1">
+              <div className="flex-1">
+                <h3 className="font-heading font-bold text-xl text-text-primary dark:text-text-primary mb-2">
                   {nextWorkout.title}
                 </h3>
-                <p className="text-sm text-text-secondary mt-1 line-clamp-2">
+                <p className="text-sm text-text-secondary dark:text-text-secondary mb-3 line-clamp-2">
                   {nextWorkout.description}
                 </p>
-                <div className="flex items-center gap-4 mt-3 text-xs text-text-muted">
-                  <span className="flex items-center gap-1">
-                    <Clock size={14} />
+                <div className="flex items-center gap-4 text-sm text-text-muted dark:text-text-muted">
+                  <span className="flex items-center gap-1.5">
+                    <Clock size={16} />
                     {nextWorkout.duration_minutes} min
                   </span>
                   {nextWorkout.details?.distance_km && (
-                    <span className="flex items-center gap-1">
-                      <MapPin size={14} />
+                    <span className="flex items-center gap-1.5">
+                      <MapPin size={16} />
                       {nextWorkout.details.distance_km} km
                     </span>
                   )}
                 </div>
               </div>
-              <ChevronRight className="text-primary" size={24} />
+              <ChevronRight className="text-secondary group-hover:translate-x-1 transition-transform" size={24} />
             </div>
           </div>
         </Link>
       )}
 
-      {/* Ukens oversikt */}
-      <div>
-        <h2 className="font-heading font-semibold text-lg text-text-primary mb-3">
-          Denne uken
-        </h2>
-        <div className="grid grid-cols-2 gap-3">
-          <StatCard 
-            icon={<MapPin className="text-running" size={20} />}
-            value={`${weekStats.runningKm} km`}
-            label="Løpt"
-            color="running"
-          />
-          <StatCard 
-            icon={<Clock className="text-secondary" size={20} />}
-            value={`${weekStats.hours} t`}
-            label="Trent"
-            color="secondary"
-          />
-          <StatCard 
-            icon={<Flame className="text-hyrox" size={20} />}
-            value={weekStats.workouts}
-            label="Økter"
-            color="hyrox"
-          />
-          <StatCard 
-            icon={<Target className="text-success" size={20} />}
-            value={weekStats.strengthSessions}
-            label="Styrke"
-            color="success"
-          />
-        </div>
-      </div>
+      {/* AI Daily Summary */}
+      <DailySummaryCard />
 
       {/* Nutrition Widget */}
       <NutritionWidget />
 
       {/* Siste økter */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-heading font-semibold text-lg text-text-primary">
-            Siste økter
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-heading font-semibold text-xl text-text-primary dark:text-text-primary">
+            Nylige økter
           </h2>
-          <Link to="/workouts" className="text-sm text-primary hover:text-primary-light">
+          <Link to="/workouts" className="text-sm text-primary hover:text-primary-light font-medium">
             Se alle
           </Link>
         </div>
 
         {recentWorkouts.length > 0 ? (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {recentWorkouts.map(workout => (
               <WorkoutMiniCard key={workout.id} workout={workout} />
             ))}
           </div>
         ) : (
-          <div className="card text-center py-8">
-            <p className="text-text-muted mb-4">Ingen treningsøkter ennå</p>
+          <div className="card text-center py-12">
+            <Activity className="mx-auto mb-3 text-text-muted dark:text-text-muted" size={48} />
+            <p className="text-text-muted dark:text-text-muted mb-4">Ingen treningsøkter ennå</p>
             <Link to="/workouts/new" className="btn-primary inline-flex">
               Logg din første økt
             </Link>
@@ -208,58 +303,41 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* 4-ukers trend */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-heading font-semibold text-lg text-text-primary">
-            Siste 4 uker
-          </h2>
-          <Link to="/stats" className="text-sm text-primary hover:text-primary-light">
-            Se detaljer
-          </Link>
-        </div>
-        <div className="card">
-          <div className="flex items-center justify-between">
+      {/* Monthly Summary Card */}
+      <Link to="/stats" className="block group">
+        <div className="card bg-gradient-to-br from-success/10 to-success/5 border-success/20 hover:scale-[1.02] transition-all duration-200">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-heading font-semibold text-lg text-text-primary dark:text-text-primary">
+              Siste 4 uker
+            </h3>
+            <TrendingUp className="text-success" size={20} />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
             <div>
-              <p className="stat-value">{monthStats.totalWorkouts}</p>
-              <p className="stat-label">Økter totalt</p>
+              <p className="text-3xl font-heading font-bold text-text-primary dark:text-text-primary">
+                {monthStats.totalWorkouts}
+              </p>
+              <p className="text-sm text-text-muted dark:text-text-muted">økter totalt</p>
             </div>
-            <div className="text-right">
-              <p className="stat-value">{monthStats.totalRunningKm} km</p>
-              <p className="stat-label">Løpt</p>
+            <div>
+              <p className="text-3xl font-heading font-bold text-text-primary dark:text-text-primary">
+                {monthStats.totalRunningKm}
+              </p>
+              <p className="text-sm text-text-muted dark:text-text-muted">km løpt</p>
+            </div>
+            <div>
+              <p className="text-3xl font-heading font-bold text-text-primary dark:text-text-primary">
+                {monthStats.avgRPE}
+              </p>
+              <p className="text-sm text-text-muted dark:text-text-muted">snitt RPE</p>
             </div>
           </div>
-          <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between text-sm">
-            <span className="text-text-muted">Snitt RPE</span>
-            <span className="text-text-primary font-medium">{monthStats.avgRPE}/10</span>
+          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-white/10 flex items-center justify-between">
+            <span className="text-sm text-text-muted dark:text-text-muted">Se detaljert statistikk</span>
+            <ChevronRight className="text-success group-hover:translate-x-1 transition-transform" size={18} />
           </div>
         </div>
-      </div>
-    </div>
-  )
-}
-
-function StatCard({ icon, value, label, color }) {
-  // Map color names to Tailwind classes (for JIT compiler compatibility)
-  const bgColors = {
-    running: 'bg-running/20',
-    secondary: 'bg-secondary/20',
-    hyrox: 'bg-hyrox/20',
-    success: 'bg-success/20',
-    primary: 'bg-primary/20'
-  }
-
-  return (
-    <div className="card">
-      <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-xl ${bgColors[color] || 'bg-primary/20'} flex items-center justify-center`}>
-          {icon}
-        </div>
-        <div>
-          <p className="font-heading font-bold text-xl text-text-primary">{value}</p>
-          <p className="text-xs text-text-muted">{label}</p>
-        </div>
-      </div>
+      </Link>
     </div>
   )
 }
@@ -269,32 +347,85 @@ function WorkoutMiniCard({ workout }) {
   const date = new Date(workout.date)
 
   return (
-    <Link to={`/workouts/${workout.id}`} className="card flex items-center gap-3 hover:bg-white/5 transition-colors">
-      <div 
-        className="w-10 h-10 rounded-xl flex items-center justify-center text-lg"
-        style={{ backgroundColor: `${type.color}20` }}
-      >
-        {type.icon}
+    <Link to={`/workouts/${workout.id}`} className="card hover:scale-[1.01] hover:shadow-lg transition-all duration-200 group">
+      <div className="flex items-center gap-4">
+        <div
+          className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl flex-shrink-0"
+          style={{ backgroundColor: `${type.color}20` }}
+        >
+          {type.icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-heading font-semibold text-text-primary dark:text-text-primary truncate mb-1">
+            {workout.title || type.name}
+          </p>
+          <div className="flex items-center gap-2 text-xs text-text-muted dark:text-text-muted flex-wrap">
+            <span className="font-medium">
+              {isToday(date) ? '🔥 I dag' : isYesterday(date) ? 'I går' : format(date, 'd. MMM', { locale: nb })}
+            </span>
+            {workout.duration && (
+              <>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <Clock size={12} />
+                  {workout.duration} min
+                </span>
+              </>
+            )}
+            {workout.running?.distance && (
+              <>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <MapPin size={12} />
+                  {workout.running.distance} km
+                </span>
+              </>
+            )}
+            {workout.rpe && (
+              <>
+                <span>•</span>
+                <span>RPE {workout.rpe}/10</span>
+              </>
+            )}
+          </div>
+        </div>
+        <ChevronRight size={20} className="text-text-muted dark:text-text-muted group-hover:translate-x-1 group-hover:text-primary transition-all flex-shrink-0" />
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-text-primary truncate">
-          {workout.title || type.name}
-        </p>
-        <p className="text-xs text-text-muted">
-          {isToday(date) ? 'I dag' : isYesterday(date) ? 'I går' : format(date, 'd. MMM', { locale: nb })}
-          {workout.duration && ` • ${workout.duration} min`}
-          {workout.running?.distance && ` • ${workout.running.distance} km`}
-        </p>
-      </div>
-      <ChevronRight size={18} className="text-text-muted" />
     </Link>
   )
 }
 
 function getGreetingMessage() {
   const hour = new Date().getHours()
-  if (hour < 10) return 'Klar for en morgenøkt?'
-  if (hour < 14) return 'Hva skal du trene i dag?'
-  if (hour < 18) return 'Tid for en treningsøkt?'
-  return 'Hvordan gikk dagens trening?'
+  const messages = {
+    morning: [
+      'Klar for en morgenøkt?',
+      'Morgenen er din - gjør den kraftfull!',
+      'Start dagen med en knallhard økt!'
+    ],
+    midday: [
+      'Hva skal du trene i dag?',
+      'Tid for å pushe grensene dine!',
+      'La oss gjøre i dag episk!'
+    ],
+    afternoon: [
+      'Tid for en treningsøkt?',
+      'Få ut energien - bli sterkere!',
+      'Push deg selv i dag!'
+    ],
+    evening: [
+      'Hvordan gikk dagens trening?',
+      'Håper du knuste det i dag!',
+      'Bra jobba i dag!'
+    ]
+  }
+
+  let timeOfDay
+  if (hour < 10) timeOfDay = 'morning'
+  else if (hour < 14) timeOfDay = 'midday'
+  else if (hour < 18) timeOfDay = 'afternoon'
+  else timeOfDay = 'evening'
+
+  const messageArray = messages[timeOfDay]
+  return messageArray[Math.floor(Math.random() * messageArray.length)]
 }

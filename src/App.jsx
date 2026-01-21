@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { Toaster } from 'react-hot-toast'
 import { useAuth } from './hooks/useAuth'
 import LoginScreen from './components/auth/LoginScreen'
 import UpdatePrompt from './components/common/UpdatePrompt'
@@ -80,6 +81,32 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
+
+      {/* Toast notifications */}
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#1a1a2e',
+            color: '#f8f9fa',
+            borderRadius: '12px',
+            padding: '12px 16px',
+          },
+          success: {
+            iconTheme: {
+              primary: '#06d6a0',
+              secondary: '#1a1a2e',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#ef476f',
+              secondary: '#1a1a2e',
+            },
+          },
+        }}
+      />
 
       {/* PWA Update Prompt */}
       <UpdatePrompt />
