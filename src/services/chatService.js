@@ -65,17 +65,21 @@ export function buildUserContext({ workouts = [], currentPlan = null, stats = nu
     }))
   }
 
-  // Add current plan
+  // Add current plan with full session details for modifications
   if (currentPlan) {
     context.currentPlan = {
+      id: currentPlan.id,
       focus: currentPlan.focus,
       weekNumber: currentPlan.weekNumber,
       totalLoad: currentPlan.totalLoad,
       sessions: currentPlan.sessions?.map(s => ({
+        id: s.id,
         day: s.day,
         type: s.type,
         title: s.title,
-        duration_minutes: s.duration_minutes
+        description: s.description,
+        duration_minutes: s.duration_minutes,
+        details: s.details
       }))
     }
   }

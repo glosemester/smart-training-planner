@@ -1,14 +1,16 @@
 import { useState, useRef, useEffect } from 'react'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { sendChatMessage, buildUserContext, STARTER_PROMPTS } from '../../services/chatService'
-import { MessageCircle, Send, Sparkles, User, Bot, Loader } from 'lucide-react'
+import { MessageCircle, Send, Sparkles, User, Bot, Loader, CheckCircle, XCircle } from 'lucide-react'
+import ActionConfirmation from './ActionConfirmation'
 
 export default function AIChat() {
-  const { workouts, currentPlan, getStats } = useWorkouts()
+  const { workouts, currentPlan, getStats, updatePlanSession, addPlanSession, deletePlanSession, updatePlan } = useWorkouts()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [pendingActions, setPendingActions] = useState(null)
   const messagesEndRef = useRef(null)
 
   // Auto-scroll to bottom when new messages arrive
@@ -44,13 +46,19 @@ export default function AIChat() {
       const response = await sendChatMessage(updatedMessages, userContext)
 
       // Add AI response to chat
-      setMessages([
-        ...updatedMessages,
-        {
-          role: 'assistant',
-          content: response.message
-        }
-      ])
+      const aiMessage = {
+        role: 'assistant',
+        content: response.message
+      }
+      setMessages([...updatedMessages, aiMessage])
+
+      // Check if AI wants to perform actions
+      if (response.actions && response.actions.length > 0) {
+        setPendingActions({
+          message: response.message,
+          actions: response.actions
+        })
+      }
     } catch (err) {
       setError(err.message || 'Kunne ikke sende melding')
       console.error('Chat error:', err)
@@ -69,6 +77,82 @@ export default function AIChat() {
       e.preventDefault()
       handleSendMessage()
     }
+  }
+
+  const handleConfirmActions = async (actions) => {
+    if (!currentPlan) {
+      setError('Ingen aktiv plan å endre')
+      setPendingActions(null)
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      for (const action of actions) {
+        const { function: funcName, arguments: args } = action
+
+        switch (funcName) {
+          case 'update_session':
+            await updatePlanSession(currentPlan.id, args.sessionId, args.changes)
+            break
+
+          case 'move_session':
+            await updatePlanSession(currentPlan.id, args.sessionId, { day: args.newDay })
+            break
+
+          case 'add_session':
+            await addPlanSession(currentPlan.id, {
+              day: args.day,
+              type: args.type,
+              title: args.title,
+              description: args.description,
+              duration_minutes: args.duration_minutes,
+              details: args.distance_km ? { distance_km: args.distance_km } : {}
+            })
+            break
+
+          case 'delete_session':
+            await deletePlanSession(currentPlan.id, args.sessionId)
+            break
+
+          case 'adjust_plan_load':
+            // This would require more complex logic to recalculate all sessions
+            // For now, we'll just add a message
+            console.log('Adjust plan load:', args)
+            break
+
+          default:
+            console.warn('Unknown action:', funcName)
+        }
+      }
+
+      // Add success message
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: '✅ Endringene er gjennomført! Sjekk planen din for å se oppdateringene.'
+        }
+      ])
+    } catch (err) {
+      setError('Kunne ikke utføre endringene: ' + err.message)
+    } finally {
+      setPendingActions(null)
+      setLoading(false)
+    }
+  }
+
+  const handleCancelActions = () => {
+    setPendingActions(null)
+    setMessages(prev => [
+      ...prev,
+      {
+        role: 'assistant',
+        content: 'Ok, jeg har kansellert endringene. Er det noe annet jeg kan hjelpe deg med?'
+      }
+    ])
   }
 
   return (
@@ -225,6 +309,17 @@ export default function AIChat() {
           AI-en har tilgang til dine siste {Math.min(workouts.length, 10)} treningsøkter
           {currentPlan && ' og din nåværende plan'}
         </p>
+      )}
+
+      {/* Action Confirmation Modal */}
+      {pendingActions && (
+        <ActionConfirmation
+          actions={pendingActions.actions}
+          message={pendingActions.message}
+          currentPlan={currentPlan}
+          onConfirm={handleConfirmActions}
+          onCancel={handleCancelActions}
+        />
       )}
     </div>
   )

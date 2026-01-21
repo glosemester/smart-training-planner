@@ -44,7 +44,10 @@ const TRAINING_COACH_SYSTEM_PROMPT = `Du er en vennlig og kunnskapsrik personlig
 - Gi konstruktive forslag til forbedring
 - Feire fremgang og milepæler
 
-Vær alltid positiv, men ærlig. Hvis brukeren planlegger noe risikabelt eller usunt, si ifra på en støttende måte.`
+Vær alltid positiv, men ærlig. Hvis brukeren planlegger noe risikabelt eller usunt, si ifra på en støttende måte.
+
+**VIKTIG - Planmodifikasjoner:**
+Når brukeren ber om å endre treningsplanen (f.eks. "flytt økten til i morgen", "legg til en intervalløkt", "reduser belastningen"), bruk tilgjengelige funksjoner for å foreslå endringer. Forklar alltid HVORFOR du foreslår endringen, og be om bekreftelse før den utføres.`
 
 export const handler = async (event) => {
   // CORS headers for all responses
@@ -127,7 +130,157 @@ export const handler = async (event) => {
       }
     }
 
-    // Call OpenAI API
+    // Define available tools for plan modification
+    const tools = [
+      {
+        type: 'function',
+        function: {
+          name: 'update_session',
+          description: 'Oppdater en eksisterende treningsøkt i planen (endre type, varighet, intensitet, etc.)',
+          parameters: {
+            type: 'object',
+            properties: {
+              sessionId: {
+                type: 'string',
+                description: 'ID til økten som skal oppdateres'
+              },
+              changes: {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', description: 'Ny treningstype' },
+                  title: { type: 'string', description: 'Ny tittel' },
+                  description: { type: 'string', description: 'Ny beskrivelse' },
+                  duration_minutes: { type: 'number', description: 'Ny varighet i minutter' },
+                  distance_km: { type: 'number', description: 'Ny distanse i km' }
+                }
+              },
+              reason: {
+                type: 'string',
+                description: 'Begrunnelse for endringen (forklart til brukeren)'
+              }
+            },
+            required: ['sessionId', 'changes', 'reason']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'move_session',
+          description: 'Flytt en treningsøkt til en annen dag',
+          parameters: {
+            type: 'object',
+            properties: {
+              sessionId: {
+                type: 'string',
+                description: 'ID til økten som skal flyttes'
+              },
+              newDay: {
+                type: 'string',
+                enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
+                description: 'Ny dag for økten'
+              },
+              reason: {
+                type: 'string',
+                description: 'Begrunnelse for flyttingen'
+              }
+            },
+            required: ['sessionId', 'newDay', 'reason']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'add_session',
+          description: 'Legg til en ny treningsøkt i planen',
+          parameters: {
+            type: 'object',
+            properties: {
+              day: {
+                type: 'string',
+                enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
+                description: 'Dag for ny økt'
+              },
+              type: {
+                type: 'string',
+                description: 'Type treningsøkt (easy_run, tempo, interval, strength, etc.)'
+              },
+              title: {
+                type: 'string',
+                description: 'Tittel på økten'
+              },
+              description: {
+                type: 'string',
+                description: 'Detaljert beskrivelse'
+              },
+              duration_minutes: {
+                type: 'number',
+                description: 'Varighet i minutter'
+              },
+              distance_km: {
+                type: 'number',
+                description: 'Distanse i km (for løping)'
+              },
+              reason: {
+                type: 'string',
+                description: 'Hvorfor denne økten legges til'
+              }
+            },
+            required: ['day', 'type', 'title', 'duration_minutes', 'reason']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'delete_session',
+          description: 'Fjern en treningsøkt fra planen',
+          parameters: {
+            type: 'object',
+            properties: {
+              sessionId: {
+                type: 'string',
+                description: 'ID til økten som skal fjernes'
+              },
+              reason: {
+                type: 'string',
+                description: 'Begrunnelse for fjerning'
+              }
+            },
+            required: ['sessionId', 'reason']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'adjust_plan_load',
+          description: 'Juster total ukentlig belastning (øk/reduser km, antall økter, intensitet)',
+          parameters: {
+            type: 'object',
+            properties: {
+              adjustment: {
+                type: 'string',
+                enum: ['increase', 'decrease', 'maintain'],
+                description: 'Øk, reduser eller behold belastning'
+              },
+              percentage: {
+                type: 'number',
+                description: 'Prosentvis endring (f.eks. 10 for 10% økning)'
+              },
+              reason: {
+                type: 'string',
+                description: 'Begrunnelse for justeringen'
+              }
+            },
+            required: ['adjustment', 'percentage', 'reason']
+          }
+        }
+      }
+    ]
+
+    // Call OpenAI API with tools
     let response
     try {
       response = await client.chat.completions.create({
@@ -136,6 +289,8 @@ export const handler = async (event) => {
           { role: 'system', content: systemPrompt },
           ...messages
         ],
+        tools: userContext?.currentPlan ? tools : undefined, // Only enable tools if user has a plan
+        tool_choice: 'auto',
         temperature: 0.7,
         max_tokens: 1000,
         presence_penalty: 0.3,
@@ -151,6 +306,39 @@ export const handler = async (event) => {
       throw new Error('No response from AI')
     }
 
+    // Check if AI wants to call a tool
+    const toolCalls = assistantMessage.tool_calls
+    if (toolCalls && toolCalls.length > 0) {
+      // Parse tool calls and return them for frontend confirmation
+      const actions = toolCalls.map(call => {
+        try {
+          return {
+            id: call.id,
+            function: call.function.name,
+            arguments: JSON.parse(call.function.arguments)
+          }
+        } catch (e) {
+          console.error('Failed to parse tool call arguments:', e)
+          return null
+        }
+      }).filter(Boolean)
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          message: assistantMessage.content || 'Jeg foreslår følgende endringer:',
+          actions, // Actions that need user confirmation
+          usage: {
+            prompt_tokens: response.usage?.prompt_tokens || 0,
+            completion_tokens: response.usage?.completion_tokens || 0,
+            total_tokens: response.usage?.total_tokens || 0
+          }
+        })
+      }
+    }
+
+    // No tool calls, just return the message
     return {
       statusCode: 200,
       headers,
