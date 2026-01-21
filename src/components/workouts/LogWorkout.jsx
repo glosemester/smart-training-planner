@@ -4,8 +4,9 @@ import { useAuth } from '../../hooks/useAuth'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { WORKOUT_TYPES, RPE_SCALE, RUNNING_SURFACES } from '../../data/workoutTypes'
 import { uploadWorkoutImage } from '../../services/imageService'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, Scan } from 'lucide-react'
 import ImageUpload from '../common/ImageUpload'
+import WorkoutScanner from '../common/WorkoutScanner'
 
 export default function LogWorkout() {
   const navigate = useNavigate()
@@ -14,6 +15,7 @@ export default function LogWorkout() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [images, setImages] = useState([])
+  const [showScanner, setShowScanner] = useState(false)
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -49,6 +51,32 @@ export default function LogWorkout() {
       ...prev,
       running: { ...prev.running, [field]: value }
     }))
+  }
+
+  const handleScanComplete = (scannedData, ocrResult) => {
+    // Merge scanned data with current form data
+    setFormData(prev => ({
+      ...prev,
+      ...scannedData,
+      running: {
+        ...prev.running,
+        ...scannedData.running
+      }
+    }))
+
+    // Add OCR suggestions to notes if any
+    if (ocrResult.suggestions && !formData.notes) {
+      setFormData(prev => ({
+        ...prev,
+        notes: `[AI-skannet]\n${ocrResult.suggestions}`
+      }))
+    }
+
+    // Close scanner
+    setShowScanner(false)
+
+    // Show success message
+    setError(null)
   }
 
   const validateForm = () => {
@@ -163,16 +191,26 @@ export default function LogWorkout() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <button 
-          onClick={() => navigate(-1)}
-          className="p-2 -ml-2 rounded-lg hover:bg-white/5"
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 -ml-2 rounded-lg hover:bg-white/5"
+          >
+            <ArrowLeft size={24} />
+          </button>
+          <h1 className="font-heading text-xl font-bold text-text-primary">
+            Logg treningsøkt
+          </h1>
+        </div>
+        <button
+          onClick={() => setShowScanner(true)}
+          className="btn-secondary flex items-center gap-2 text-sm"
+          type="button"
         >
-          <ArrowLeft size={24} />
+          <Scan size={18} />
+          Skann
         </button>
-        <h1 className="font-heading text-xl font-bold text-text-primary">
-          Logg treningsøkt
-        </h1>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6" aria-label="Logg treningsøkt">
@@ -400,6 +438,14 @@ export default function LogWorkout() {
           )}
         </button>
       </form>
+
+      {/* Workout Scanner Modal */}
+      {showScanner && (
+        <WorkoutScanner
+          onDataExtracted={handleScanComplete}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
     </div>
   )
 }
