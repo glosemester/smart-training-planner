@@ -91,15 +91,17 @@ export default function AIPlanner() {
 
       // Automatisk lagre planen til Firestore
       const monday = getNextMonday()
-      await savePlan({
+      const savedPlan = {
         ...plan,
         weekStart: monday.toISOString(),
         generatedBy: 'ai',
         wizardAnswers: wizardAnswers // Lagre preferanser for fremtidig bruk
-      })
+      }
+      await savePlan(savedPlan)
 
+      // Vis planen umiddelbart mens vi venter på Firestore oppdatering
+      setGeneratedPlan(savedPlan)
       setGeneratingStep('Ferdig!')
-      setGeneratedPlan(null) // Clear generated plan siden den nå er i currentPlan
       setJustSaved(true)
 
       // Skjul suksessmeldingen etter 5 sekunder
@@ -686,12 +688,21 @@ function AddSessionModal({ day, onSave, onCancel }) {
 function getNextMonday() {
   const today = new Date()
   const dayOfWeek = today.getDay()
-  // If Sunday (0), next Monday is tomorrow (1 day)
-  // If Monday (1), next Monday is today (0 days)
-  // Otherwise, calculate days until next Monday
-  const daysUntilMonday = dayOfWeek === 0 ? 1 : dayOfWeek === 1 ? 0 : 8 - dayOfWeek
-  const nextMonday = new Date(today)
-  nextMonday.setDate(today.getDate() + daysUntilMonday)
-  nextMonday.setHours(0, 0, 0, 0)
-  return nextMonday
+  // Get Monday of current week (or next Monday if today is Sunday)
+  // Sunday (0) -> next Monday (1 day ahead)
+  // Monday (1) -> today (0 days)
+  // Tuesday-Saturday -> previous Monday
+  let daysToMonday
+  if (dayOfWeek === 0) {
+    // Sunday - use next Monday
+    daysToMonday = 1
+  } else {
+    // Monday-Saturday - use Monday of this week
+    daysToMonday = -(dayOfWeek - 1)
+  }
+
+  const monday = new Date(today)
+  monday.setDate(today.getDate() + daysToMonday)
+  monday.setHours(0, 0, 0, 0)
+  return monday
 }
