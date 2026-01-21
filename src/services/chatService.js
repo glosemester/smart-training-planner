@@ -45,6 +45,46 @@ export async function sendChatMessage(messages, userContext = null) {
 }
 
 /**
+ * Build exercise history from workouts for easy querying
+ * @param {Array} workouts - All workouts
+ * @returns {Object} Exercise history mapped by exercise name
+ */
+function buildExerciseHistory(workouts) {
+  const exerciseMap = {}
+
+  workouts.forEach(workout => {
+    if (workout.strength?.exercises) {
+      workout.strength.exercises.forEach(exercise => {
+        if (!exercise.name?.trim()) return
+
+        const exerciseName = exercise.name.toLowerCase().trim()
+        if (!exerciseMap[exerciseName]) {
+          exerciseMap[exerciseName] = []
+        }
+
+        exerciseMap[exerciseName].push({
+          date: workout.date,
+          sets: exercise.sets,
+          reps: exercise.reps,
+          weight: exercise.weight,
+          workoutType: workout.type,
+          workoutTitle: workout.title
+        })
+      })
+    }
+  })
+
+  // Sort each exercise's history by date (most recent first)
+  Object.keys(exerciseMap).forEach(exerciseName => {
+    exerciseMap[exerciseName].sort((a, b) =>
+      new Date(b.date) - new Date(a.date)
+    )
+  })
+
+  return exerciseMap
+}
+
+/**
  * Build user context from workout data and current plan
  * @param {Object} params - Context parameters
  * @returns {Object} Formatted user context
@@ -52,17 +92,30 @@ export async function sendChatMessage(messages, userContext = null) {
 export function buildUserContext({ workouts = [], currentPlan = null, stats = null, goals = null }) {
   const context = {}
 
-  // Add recent workouts (last 10)
+  // Add all workouts (for exercise history queries)
   if (workouts && workouts.length > 0) {
-    context.recentWorkouts = workouts.slice(0, 10).map(w => ({
+    context.allWorkouts = workouts.map(w => ({
+      id: w.id,
       date: w.date,
       type: w.type,
       title: w.title,
       duration: w.duration,
       running: w.running,
+      strength: w.strength, // Include exercises with weights
       rpe: w.rpe,
       notes: w.notes
     }))
+
+    // Also provide recent summary (last 10)
+    context.recentWorkouts = workouts.slice(0, 10).map(w => ({
+      date: w.date,
+      type: w.type,
+      title: w.title,
+      duration: w.duration
+    }))
+
+    // Build exercise history for easy querying
+    context.exerciseHistory = buildExerciseHistory(workouts)
   }
 
   // Add current plan with full session details for modifications
