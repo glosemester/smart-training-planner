@@ -4,7 +4,6 @@ import { Home, Calendar, CalendarDays, Apple, MessageCircle, Plus } from 'lucide
 const navItems = [
   { to: '/', icon: Home, label: 'Hjem' },
   { to: '/plan', icon: Calendar, label: 'Plan' },
-  { to: '/calendar', icon: CalendarDays, label: 'Kalender' },
   { to: '/workouts/new', icon: Plus, label: 'Logg', isAction: true },
   { to: '/nutrition', icon: Apple, label: 'Mat' },
   { to: '/chat', icon: MessageCircle, label: 'Coach' }
@@ -15,7 +14,7 @@ export default function Navigation() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 glass border-t border-white/5"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-background-secondary/95 backdrop-blur-xl border-t border-white/10"
       style={{
         paddingBottom: 'max(env(safe-area-inset-bottom), 0.5rem)',
         paddingLeft: 'env(safe-area-inset-left)',
@@ -23,8 +22,8 @@ export default function Navigation() {
       }}
       aria-label="Hovednavigasjon"
     >
-      <div className="max-w-lg mx-auto px-4">
-        <div className="flex items-center justify-around py-3 relative">
+      <div className="max-w-lg mx-auto px-2">
+        <div className="flex items-center justify-around h-16 relative">
           {navItems.map(({ to, icon: Icon, label, isAction }) => {
             const isActive = location.pathname === to ||
               (to !== '/' && location.pathname.startsWith(to))
@@ -35,15 +34,15 @@ export default function Navigation() {
                   key={to}
                   to={to}
                   aria-label={label}
-                  className="flex flex-col items-center gap-0.5 p-3 -mt-6
+                  className="flex items-center justify-center -mt-8
                     bg-gradient-to-br from-primary to-primary-dark
-                    rounded-full w-16 h-16 justify-center
-                    shadow-lg shadow-primary/50
-                    hover:shadow-xl hover:shadow-primary/60
-                    active:scale-95 transition-all duration-300
-                    hover:scale-110 hover:-translate-y-1"
+                    rounded-full w-14 h-14
+                    shadow-lg shadow-primary/30
+                    hover:shadow-xl hover:shadow-primary/40
+                    active:scale-95 transition-all duration-200
+                    hover:scale-105"
                 >
-                  <Icon size={26} strokeWidth={2.5} aria-hidden="true" className="text-white" />
+                  <Icon size={24} strokeWidth={2.5} className="text-white" />
                 </NavLink>
               )
             }
@@ -53,43 +52,30 @@ export default function Navigation() {
                 key={to}
                 to={to}
                 aria-label={label}
-                className={`
-                  flex flex-col items-center gap-1 px-3 py-2 rounded-xl
-                  transition-all duration-300 relative group
-                  ${isActive
-                    ? 'text-primary'
-                    : 'text-text-muted hover:text-text-secondary'
-                  }
-                `}
+                className="flex flex-col items-center justify-center gap-1 px-2 py-1 relative group"
               >
-                {/* Active indicator */}
-                {isActive && (
-                  <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-8 h-1 bg-primary rounded-full" />
-                )}
+                {/* Icon */}
+                <Icon
+                  size={24}
+                  strokeWidth={isActive ? 2.5 : 2}
+                  className={`transition-all duration-200 ${
+                    isActive
+                      ? 'text-primary scale-110'
+                      : 'text-text-muted group-hover:text-text-secondary group-hover:scale-105'
+                  }`}
+                />
 
-                {/* Icon with bounce animation when active */}
-                <div className={`transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`}>
-                  <Icon
-                    size={22}
-                    strokeWidth={isActive ? 2.5 : 2}
-                    aria-hidden="true"
-                    className={isActive ? 'animate-pulse-subtle' : ''}
-                  />
-                </div>
-
-                {/* Label with fade effect */}
-                <span className={`
-                  text-[10px] font-medium transition-all duration-300
-                  ${isActive ? 'font-bold' : 'font-normal'}
-                `}>
+                {/* Label */}
+                <span className={`text-[9px] font-medium transition-colors duration-200 ${
+                  isActive ? 'text-primary' : 'text-text-muted'
+                }`}>
                   {label}
                 </span>
 
-                {/* Hover ripple effect */}
-                <div className={`
-                  absolute inset-0 rounded-xl bg-white/5
-                  opacity-0 group-hover:opacity-100 transition-opacity duration-300
-                `} />
+                {/* Active dot indicator */}
+                {isActive && (
+                  <div className="absolute bottom-0 w-1 h-1 rounded-full bg-primary animate-pulse" />
+                )}
               </NavLink>
             )
           })}

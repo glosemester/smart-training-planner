@@ -43,7 +43,7 @@ export default function QuickActions() {
       )}
 
       {/* Action buttons */}
-      <div className="fixed bottom-24 right-6 z-50 flex flex-col-reverse items-end gap-3">
+      <div className="fixed bottom-24 right-4 z-50 flex flex-col-reverse items-end gap-2">
         {/* Quick action buttons */}
         {isOpen && actions.map((action, index) => (
           <button
@@ -51,18 +51,19 @@ export default function QuickActions() {
             onClick={() => handleAction(action.to)}
             className={`
               ${action.color} text-white
-              rounded-full px-5 py-3 shadow-lg
-              flex items-center gap-2
-              transform transition-all duration-300
-              hover:scale-110 hover:shadow-xl
-              animate-bounce-in
+              rounded-2xl pl-4 pr-5 py-2.5 shadow-lg
+              flex items-center gap-2.5
+              transform transition-all duration-200
+              hover:scale-105 hover:shadow-xl
+              active:scale-95
+              animate-slide-in-right
             `}
             style={{
               animationDelay: `${index * 50}ms`
             }}
           >
-            <action.icon size={20} />
-            <span className="font-medium text-sm">{action.label}</span>
+            <action.icon size={18} strokeWidth={2.5} />
+            <span className="font-semibold text-sm whitespace-nowrap">{action.label}</span>
           </button>
         ))}
 
@@ -72,19 +73,15 @@ export default function QuickActions() {
           className={`
             w-14 h-14 rounded-full
             bg-gradient-to-br from-primary to-primary-dark
-            shadow-lg shadow-primary/50
+            shadow-lg shadow-primary/40
             flex items-center justify-center
-            transition-all duration-300
-            hover:scale-110 hover:shadow-xl hover:shadow-primary/60
+            transition-all duration-200
+            hover:scale-105 hover:shadow-xl hover:shadow-primary/50
             active:scale-95
             ${isOpen ? 'rotate-45' : ''}
           `}
         >
-          {isOpen ? (
-            <X size={24} className="text-white" />
-          ) : (
-            <Plus size={24} className="text-white" />
-          )}
+          <Plus size={26} strokeWidth={2.5} className="text-white" />
         </button>
       </div>
     </>
