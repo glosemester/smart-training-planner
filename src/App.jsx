@@ -13,6 +13,7 @@ const WorkoutDetail = lazy(() => import('./components/workouts/WorkoutDetail'))
 const AIPlanner = lazy(() => import('./components/planning/AIPlanner'))
 const GoalSetting = lazy(() => import('./components/planning/GoalSetting'))
 const Statistics = lazy(() => import('./components/stats/Statistics'))
+const TrainingCalendar = lazy(() => import('./components/calendar/TrainingCalendar'))
 const HealthSync = lazy(() => import('./components/health/HealthSync'))
 const AIChat = lazy(() => import('./components/chat/AIChat'))
 const NutritionTracker = lazy(() => import('./components/nutrition/NutritionTracker'))
@@ -67,6 +68,7 @@ function App() {
             <Route path="workouts/new" element={<LogWorkout />} />
             <Route path="workouts/:id" element={<WorkoutDetail />} />
             <Route path="plan" element={<AIPlanner />} />
+            <Route path="calendar" element={<TrainingCalendar />} />
             <Route path="goals" element={<GoalSetting />} />
             <Route path="stats" element={<Statistics />} />
             <Route path="health" element={<HealthSync />} />
