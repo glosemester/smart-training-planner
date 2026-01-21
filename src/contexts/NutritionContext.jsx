@@ -39,15 +39,9 @@ export function NutritionProvider({ children }) {
       path: `users/${user.uid}/meals`
     })
 
-    // Hent måltider fra siste 30 dager
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-
-    const mealsQuery = query(
-      collection(db, 'users', user.uid, 'meals'),
-      where('date', '>=', Timestamp.fromDate(thirtyDaysAgo)),
-      orderBy('date', 'desc')
-    )
+    // TEMPORARY: Simplest possible query to test permissions
+    // No where, no orderBy - just fetch everything
+    const mealsQuery = collection(db, 'users', user.uid, 'meals')
 
     const unsubscribe = onSnapshot(
       mealsQuery,
