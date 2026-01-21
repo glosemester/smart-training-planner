@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class', // Enable dark mode with class strategy
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -7,12 +8,19 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Bakgrunnsfarger
+        // Bakgrunnsfarger (støtter både mørk og lys modus)
         background: {
           DEFAULT: '#0f0f0f',
           secondary: '#1a1a2e',
           card: '#16213e',
-          elevated: '#1f2937'
+          elevated: '#1f2937',
+          // Light mode variants
+          light: {
+            DEFAULT: '#ffffff',
+            secondary: '#f8f9fa',
+            card: '#ffffff',
+            elevated: '#f1f3f5'
+          }
         },
         // Aksentfarger
         primary: {
@@ -33,11 +41,17 @@ export default {
         ai: '#a855f7',
         nutrition: '#06d6a0',
         recovery: '#64748b',
-        // Tekstfarger
+        // Tekstfarger (støtter både mørk og lys modus)
         text: {
           primary: '#f8f9fa',
           secondary: '#adb5bd',
-          muted: '#6c757d'
+          muted: '#6c757d',
+          // Light mode variants
+          light: {
+            primary: '#212529',
+            secondary: '#495057',
+            muted: '#6c757d'
+          }
         },
         // Treningstype-farger
         running: '#ff6b35',
