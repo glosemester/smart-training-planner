@@ -1,12 +1,13 @@
 import { useState, useMemo } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, startOfWeek, endOfWeek, isSameMonth, isToday, isSameDay, isPast, differenceInDays } from 'date-fns'
 import { nb } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, Clock, MapPin, CheckCircle, Edit, TrendingUp, Target, Flame, Grid3x3, List } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, Clock, MapPin, CheckCircle, Edit, TrendingUp, Target, Flame, Grid3x3, List, Share2 } from 'lucide-react'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { getWorkoutType } from '../../data/workoutTypes'
 import { useNavigate } from 'react-router-dom'
 import { useToast } from '../../hooks/useToast'
 import ToastContainer from '../common/ToastContainer'
+import { shareAchievement } from '../../utils/shareUtils'
 
 export default function TrainingCalendar() {
   const { plans, workouts, updatePlanSession } = useWorkouts()
@@ -428,10 +429,28 @@ export default function TrainingCalendar() {
         {/* Completion Statistics */}
         <div className="grid grid-cols-3 gap-3">
           {/* Week completion */}
-          <div className="bg-background-secondary rounded-xl p-3 border border-white/5 hover:border-primary/30 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-primary/10">
-            <div className="flex items-center gap-2 mb-2">
-              <Target size={16} className="text-primary" />
-              <span className="text-xs font-medium text-text-muted">Uke</span>
+          <div className="bg-background-secondary rounded-xl p-3 border border-white/5 hover:border-primary/30 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-primary/10 relative group">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Target size={16} className="text-primary" />
+                <span className="text-xs font-medium text-text-muted">Uke</span>
+              </div>
+              {stats.weekRate === 100 && stats.weekCompleted > 0 && (
+                <button
+                  onClick={async () => {
+                    const success = await shareAchievement('weekly_goal', {
+                      completed: stats.weekCompleted,
+                      planned: stats.weekPlanned,
+                      rate: stats.weekRate
+                    })
+                    toast.success(success ? '🎯 Ukemål delt!' : '📋 Kopiert til utklippstavle')
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-primary/20"
+                  aria-label="Del ukemål"
+                >
+                  <Share2 size={12} className="text-primary" />
+                </button>
+              )}
             </div>
             <div className="flex flex-col">
               <span className="text-2xl font-bold text-white animate-scale-up">{stats.weekRate}%</span>
@@ -442,10 +461,26 @@ export default function TrainingCalendar() {
           </div>
 
           {/* Month completion */}
-          <div className="bg-background-secondary rounded-xl p-3 border border-white/5 hover:border-secondary/30 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-secondary/10">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp size={16} className="text-secondary" />
-              <span className="text-xs font-medium text-text-muted">Måned</span>
+          <div className="bg-background-secondary rounded-xl p-3 border border-white/5 hover:border-secondary/30 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-secondary/10 relative group">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <TrendingUp size={16} className="text-secondary" />
+                <span className="text-xs font-medium text-text-muted">Måned</span>
+              </div>
+              {stats.monthCompleted >= 10 && (
+                <button
+                  onClick={async () => {
+                    const success = await shareAchievement('monthly_goal', {
+                      completed: stats.monthCompleted
+                    })
+                    toast.success(success ? '📊 Månedsmål delt!' : '📋 Kopiert til utklippstavle')
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-secondary/20"
+                  aria-label="Del månedsmål"
+                >
+                  <Share2 size={12} className="text-secondary" />
+                </button>
+              )}
             </div>
             <div className="flex flex-col">
               <span className="text-2xl font-bold text-white animate-scale-up">{stats.monthRate}%</span>
@@ -456,10 +491,28 @@ export default function TrainingCalendar() {
           </div>
 
           {/* Streak */}
-          <div className="bg-background-secondary rounded-xl p-3 border border-white/5 hover:border-warning/30 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-warning/10">
-            <div className="flex items-center gap-2 mb-2">
-              <Flame size={16} className={`text-warning ${stats.currentStreak > 0 ? 'animate-pulse-subtle' : ''}`} />
-              <span className="text-xs font-medium text-text-muted">Streak</span>
+          <div className="bg-background-secondary rounded-xl p-3 border border-white/5 hover:border-warning/30 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-warning/10 relative group">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Flame size={16} className={`text-warning ${stats.currentStreak > 0 ? 'animate-pulse-subtle' : ''}`} />
+                <span className="text-xs font-medium text-text-muted">Streak</span>
+              </div>
+              {stats.currentStreak >= 3 && (
+                <button
+                  onClick={async () => {
+                    const success = await shareAchievement('streak', { days: stats.currentStreak })
+                    if (success) {
+                      toast.success('🔥 Streak delt!')
+                    } else {
+                      toast.info('📋 Kopiert til utklippstavle')
+                    }
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-warning/20"
+                  aria-label="Del streak"
+                >
+                  <Share2 size={12} className="text-warning" />
+                </button>
+              )}
             </div>
             <div className="flex flex-col">
               <span className="text-2xl font-bold text-white animate-scale-up">{stats.currentStreak}</span>
