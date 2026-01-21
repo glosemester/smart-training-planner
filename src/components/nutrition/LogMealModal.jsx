@@ -60,8 +60,8 @@ export default function LogMealModal({ date, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-background-primary rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+      <div className="bg-background-primary rounded-2xl max-w-lg w-full max-h-[82vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-white/10 sticky top-0 bg-background-primary z-10">
           <h2 className="font-heading text-lg font-bold text-text-primary">
@@ -77,7 +77,7 @@ export default function LogMealModal({ date, onClose }) {
         </div>
 
         {/* Content */}
-        <div className="p-6 pb-8 space-y-4">
+        <div className="p-6 pb-36 space-y-4">
           {/* Meal Type */}
           <div>
             <label className="input-label">Type måltid</label>

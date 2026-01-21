@@ -541,8 +541,8 @@ function EditSessionModal({ session, onSave, onCancel }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-background-primary rounded-xl max-w-md w-full p-6">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+      <div className="bg-background-primary rounded-xl max-w-md w-full p-6 pb-36">
         <h2 className="text-xl font-bold text-text-primary mb-4">Rediger økt</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -647,8 +647,8 @@ function AddSessionModal({ day, onSave, onCancel }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-background-primary rounded-xl max-w-md w-full p-6 my-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 overflow-y-auto">
+      <div className="bg-background-primary rounded-xl max-w-md w-full p-6 pb-36 my-4">
         <h2 className="text-xl font-bold text-text-primary mb-4">
           Legg til økt - {dayNames[day]}
         </h2>
