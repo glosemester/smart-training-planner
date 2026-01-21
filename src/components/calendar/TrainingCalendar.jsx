@@ -1,13 +1,14 @@
 import { useState, useMemo } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, startOfWeek, endOfWeek, isSameMonth, isToday, isSameDay, isPast, differenceInDays } from 'date-fns'
 import { nb } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, Clock, MapPin, CheckCircle, Edit, TrendingUp, Target, Flame, Grid3x3, List, Share2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, Clock, MapPin, CheckCircle, Edit, TrendingUp, Target, Flame, Grid3x3, List, Share2, Download, FileText, Image } from 'lucide-react'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { getWorkoutType } from '../../data/workoutTypes'
 import { useNavigate } from 'react-router-dom'
 import { useToast } from '../../hooks/useToast'
 import ToastContainer from '../common/ToastContainer'
 import { shareAchievement } from '../../utils/shareUtils'
+import { exportCalendarAsPNG, exportCalendarAsPDF, shareCalendarImage } from '../../utils/calendarExport'
 
 export default function TrainingCalendar() {
   const { plans, workouts, updatePlanSession } = useWorkouts()
@@ -20,6 +21,8 @@ export default function TrainingCalendar() {
   const [loading, setLoading] = useState(false)
   const [draggedSession, setDraggedSession] = useState(null)
   const [draggedPlan, setDraggedPlan] = useState(null)
+  const [showExportMenu, setShowExportMenu] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   // Generate 6 months of dates
   const monthsToShow = useMemo(() => {
@@ -109,6 +112,49 @@ export default function TrainingCalendar() {
       })
     } else {
       setStartDate(prev => addMonths(prev, 1))
+    }
+  }
+
+  const handleExportPNG = async () => {
+    try {
+      setExporting(true)
+      await exportCalendarAsPNG('calendar-export-area')
+      toast.success('📸 Kalender eksportert som bilde!')
+      setShowExportMenu(false)
+    } catch (error) {
+      toast.error('Kunne ikke eksportere kalender')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleExportPDF = async () => {
+    try {
+      setExporting(true)
+      await exportCalendarAsPDF('calendar-export-area')
+      toast.success('📄 Kalender eksportert som PDF!')
+      setShowExportMenu(false)
+    } catch (error) {
+      toast.error('Kunne ikke eksportere kalender')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleShareImage = async () => {
+    try {
+      setExporting(true)
+      const shared = await shareCalendarImage('calendar-export-area')
+      if (shared) {
+        toast.success('📤 Kalender delt!')
+      } else {
+        toast.success('📸 Kalender lastet ned!')
+      }
+      setShowExportMenu(false)
+    } catch (error) {
+      toast.error('Kunne ikke dele kalender')
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -346,6 +392,8 @@ export default function TrainingCalendar() {
     <>
       <ToastContainer toasts={toast.toasts} removeToast={toast.removeToast} />
       <div className="min-h-screen bg-background pb-24 px-4 pt-6">
+        {/* Export wrapper */}
+        <div id="calendar-export-area">
         {/* Header */}
       <div className="mb-6 animate-fade-in-up">
         <div className="flex items-center justify-between mb-4">
@@ -385,12 +433,66 @@ export default function TrainingCalendar() {
               </button>
             </div>
 
-            <button
-              onClick={goToToday}
-              className="btn-secondary px-4 py-2 text-sm hover:scale-105 transition-transform"
-            >
-              I dag
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={goToToday}
+                className="btn-secondary px-4 py-2 text-sm hover:scale-105 transition-transform"
+              >
+                I dag
+              </button>
+
+              {/* Export menu */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  className="btn-ghost px-3 py-2 text-sm hover:scale-105 transition-transform"
+                  disabled={exporting}
+                  aria-label="Eksporter kalender"
+                >
+                  <Download size={18} className={exporting ? 'animate-pulse' : ''} />
+                </button>
+
+                {showExportMenu && (
+                  <>
+                    {/* Backdrop */}
+                    <div
+                      onClick={() => setShowExportMenu(false)}
+                      className="fixed inset-0 z-40"
+                    />
+
+                    {/* Menu */}
+                    <div className="absolute right-0 mt-2 w-48 bg-background-secondary rounded-xl border border-white/10 shadow-xl z-50 overflow-hidden animate-fade-in-up">
+                      <button
+                        onClick={handleExportPNG}
+                        disabled={exporting}
+                        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-white/5 transition-colors text-left disabled:opacity-50"
+                      >
+                        <Image size={18} className="text-primary" />
+                        <span className="text-sm">Eksporter som bilde</span>
+                      </button>
+
+                      <button
+                        onClick={handleExportPDF}
+                        disabled={exporting}
+                        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-white/5 transition-colors text-left disabled:opacity-50"
+                      >
+                        <FileText size={18} className="text-secondary" />
+                        <span className="text-sm">Eksporter som PDF</span>
+                      </button>
+
+                      <button
+                        onClick={handleShareImage}
+                        disabled={exporting}
+                        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-white/5 transition-colors text-left disabled:opacity-50"
+                      >
+                        <Share2 size={18} className="text-success" />
+                        <span className="text-sm">Del kalender</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -551,6 +653,8 @@ export default function TrainingCalendar() {
           loading={loading}
         />
       )}
+      </div>
+      {/* End export wrapper */}
 
       {/* Day Detail Modal */}
       {showDayDetail && selectedDate && (
