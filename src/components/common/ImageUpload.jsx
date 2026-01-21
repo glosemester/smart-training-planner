@@ -70,7 +70,7 @@ export default function ImageUpload({ images = [], onImagesChange, maxImages = 5
 
       {/* Upload buttons */}
       {images.length < maxImages && (
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           {/* Camera button (for mobile) */}
           <button
             type="button"
@@ -85,20 +85,20 @@ export default function ImageUpload({ images = [], onImagesChange, maxImages = 5
                 }, 100)
               }
             }}
-            className="flex-1 btn-outline py-3 text-sm"
+            className="flex-1 btn-secondary py-3 flex items-center justify-center gap-2"
           >
-            <Camera size={18} />
-            Ta bilde
+            <Camera size={20} />
+            <span className="font-medium">Ta bilde</span>
           </button>
 
           {/* Gallery button */}
           <button
             type="button"
             onClick={openFilePicker}
-            className="flex-1 btn-outline py-3 text-sm"
+            className="flex-1 btn-secondary py-3 flex items-center justify-center gap-2"
           >
-            <Upload size={18} />
-            Velg fra galleri
+            <Upload size={20} />
+            <span className="font-medium">Galleri</span>
           </button>
         </div>
       )}

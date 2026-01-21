@@ -1,12 +1,12 @@
 import { NavLink } from 'react-router-dom'
-import { Home, Dumbbell, Apple, MessageCircle, Plus } from 'lucide-react'
+import { Home, Calendar, Apple, MessageCircle, Plus } from 'lucide-react'
 
 const navItems = [
   { to: '/', icon: Home, label: 'Hjem' },
-  { to: '/workouts', icon: Dumbbell, label: 'Økter' },
+  { to: '/plan', icon: Calendar, label: 'Plan' },
   { to: '/workouts/new', icon: Plus, label: 'Logg', isAction: true },
   { to: '/nutrition', icon: Apple, label: 'Mat' },
-  { to: '/chat', icon: MessageCircle, label: 'Chat' }
+  { to: '/chat', icon: MessageCircle, label: 'Coach' }
 ]
 
 export default function Navigation() {

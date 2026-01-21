@@ -29,6 +29,10 @@ export default {
         success: '#06d6a0',
         warning: '#ffd166',
         error: '#ef476f',
+        // Feature-farger
+        ai: '#a855f7',
+        nutrition: '#06d6a0',
+        recovery: '#64748b',
         // Tekstfarger
         text: {
           primary: '#f8f9fa',

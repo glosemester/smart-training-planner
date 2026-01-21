@@ -111,13 +111,13 @@ export default function DailySummaryCard() {
   // Loading state
   if (loading) {
     return (
-      <div className="card bg-gradient-to-br from-secondary/20 to-secondary/5 border-secondary/20">
+      <div className="card bg-gradient-to-br from-ai/20 to-ai/5 border-ai/20">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-secondary/20 flex items-center justify-center">
-            <Sparkles className="text-secondary animate-pulse" size={20} />
+          <div className="w-10 h-10 rounded-xl bg-ai/20 flex items-center justify-center">
+            <Sparkles className="text-ai animate-pulse" size={20} />
           </div>
           <div>
-            <p className="text-sm text-secondary font-medium">AI Oppsummering</p>
+            <p className="text-sm text-ai font-medium">AI Oppsummering</p>
             <p className="text-xs text-text-muted mt-0.5">Analyserer dine data...</p>
           </div>
         </div>
@@ -150,11 +150,11 @@ export default function DailySummaryCard() {
   // No summary yet
   if (!summary) {
     return (
-      <div className="card border-secondary/20">
+      <div className="card border-ai/20">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-secondary/20 flex items-center justify-center">
-              <Sparkles className="text-secondary" size={20} />
+            <div className="w-10 h-10 rounded-xl bg-ai/20 flex items-center justify-center">
+              <Sparkles className="text-ai" size={20} />
             </div>
             <div>
               <p className="text-sm text-text-primary font-medium">AI Daglig Oppsummering</p>
@@ -175,14 +175,14 @@ export default function DailySummaryCard() {
   // Mood colors
   const moodColors = {
     positive: { bg: 'bg-success/20', text: 'text-success', border: 'border-success/20' },
-    neutral: { bg: 'bg-secondary/20', text: 'text-secondary', border: 'border-secondary/20' },
+    neutral: { bg: 'bg-ai/20', text: 'text-ai', border: 'border-ai/20' },
     warning: { bg: 'bg-warning/20', text: 'text-warning', border: 'border-warning/20' }
   }
 
   const colors = moodColors[summary.mood] || moodColors.neutral
 
   return (
-    <div className={`card bg-gradient-to-br from-secondary/20 to-secondary/5 ${colors.border}`}>
+    <div className={`card bg-gradient-to-br from-ai/20 to-ai/5 ${colors.border}`}>
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
@@ -190,7 +190,7 @@ export default function DailySummaryCard() {
             <Sparkles className={colors.text} size={20} />
           </div>
           <div>
-            <p className="text-xs text-secondary font-medium uppercase tracking-wide">
+            <p className="text-xs text-ai font-medium uppercase tracking-wide">
               AI Oppsummering
             </p>
             <h3 className="font-heading font-bold text-lg text-text-primary mt-0.5">

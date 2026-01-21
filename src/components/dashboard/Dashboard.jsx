@@ -15,6 +15,7 @@ import {
   Target
 } from 'lucide-react'
 import DailySummaryCard from './DailySummaryCard'
+import NutritionWidget from './NutritionWidget'
 
 export default function Dashboard() {
   const { userProfile } = useAuth()
@@ -172,6 +173,9 @@ export default function Dashboard() {
           />
         </div>
       </div>
+
+      {/* Nutrition Widget */}
+      <NutritionWidget />
 
       {/* Siste økter */}
       <div>

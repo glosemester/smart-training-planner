@@ -9,7 +9,7 @@ export default function Layout() {
       <Header />
 
       {/* Main content */}
-      <main className="flex-1 pb-20 px-4 pt-4">
+      <main className="flex-1 pb-28 px-4 pt-4">
         <div className="max-w-lg mx-auto">
           <Outlet />
         </div>
