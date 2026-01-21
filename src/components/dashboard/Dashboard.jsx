@@ -198,9 +198,14 @@ export default function Dashboard() {
 
       {/* 4-ukers trend */}
       <div>
-        <h2 className="font-heading font-semibold text-lg text-text-primary mb-3">
-          Siste 4 uker
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-heading font-semibold text-lg text-text-primary">
+            Siste 4 uker
+          </h2>
+          <Link to="/stats" className="text-sm text-primary hover:text-primary-light">
+            Se detaljer
+          </Link>
+        </div>
         <div className="card">
           <div className="flex items-center justify-between">
             <div>

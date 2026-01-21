@@ -1,12 +1,12 @@
 import { NavLink } from 'react-router-dom'
-import { Home, Dumbbell, Brain, BarChart3, Plus } from 'lucide-react'
+import { Home, Dumbbell, Brain, MessageCircle, Plus } from 'lucide-react'
 
 const navItems = [
   { to: '/', icon: Home, label: 'Hjem' },
   { to: '/workouts', icon: Dumbbell, label: 'Økter' },
   { to: '/workouts/new', icon: Plus, label: 'Logg', isAction: true },
   { to: '/plan', icon: Brain, label: 'Plan' },
-  { to: '/stats', icon: BarChart3, label: 'Stats' }
+  { to: '/chat', icon: MessageCircle, label: 'Chat' }
 ]
 
 export default function Navigation() {
