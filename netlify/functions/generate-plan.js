@@ -48,7 +48,7 @@ Output-format: Returner alltid en strukturert JSON med følgende format for FLER
           "day": "monday|tuesday|wednesday|thursday|friday|saturday|sunday",
           "type": "easy_run|tempo|interval|long_run|hyrox|crossfit|strength|rest|recovery",
           "title": "string - kort beskrivende tittel",
-          "description": "string - detaljert beskrivelse av økten",
+          "description": "string - KORT beskrivelse (maks 2 setninger, ~50 tokens)",
           "duration_minutes": number,
           "details": {
             // For løping:
@@ -62,7 +62,7 @@ Output-format: Returner alltid en strukturert JSON med følgende format for FLER
           }
         }
       ],
-      "weeklyTips": ["string tips for uken"]
+      "weeklyTips": ["string tips (maks 2 tips per uke, maks 30 tokens hver)"]
     }
   ],
   "overallStrategy": "string - overordnet strategi for hele perioden",
