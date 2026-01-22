@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useWorkouts } from '../../hooks/useWorkouts'
-import { generateTrainingPlan } from '../../services/aiService'
+import { generateTrainingPlan, generateTrainingPlanChunk } from '../../services/aiService'
 import { getWorkoutType } from '../../data/workoutTypes'
 import { Brain, Sparkles, RefreshCw, Check, Clock, MapPin, Edit2, Trash2, Plus, GripVertical, Image as ImageIcon, FileDown, X, Info } from 'lucide-react'
 import PlanningWizard from './PlanningWizard'
@@ -43,6 +43,13 @@ export default function AIPlanner() {
   const [addingSessionDay, setAddingSessionDay] = useState(null)
   const [viewingSession, setViewingSession] = useState(null)
   const [completingSession, setCompletingSession] = useState(null)
+  const [chunkProgress, setChunkProgress] = useState({
+    currentChunk: 0,
+    totalChunks: 0,
+    completedWeeks: 0,
+    totalWeeks: 0
+  })
+  const [planContext, setPlanContext] = useState(null)
 
   // Drag and drop sensors
   const sensors = useSensors(
@@ -55,7 +62,6 @@ export default function AIPlanner() {
   const handleWizardComplete = async (wizardAnswers) => {
     setShowWizard(false)
     setGenerating(true)
-    setGeneratingStep('Analyserer treningshistorikk...')
     setError(null)
 
     try {
@@ -90,26 +96,75 @@ export default function AIPlanner() {
         }
       }
 
-      setGeneratingStep('Genererer personlig treningsplan...')
-      const planData = await generateTrainingPlan(userData)
+      // Calculate total weeks needed
+      const totalWeeks = calculateTotalWeeks(wizardAnswers)
+      const weeksPerChunk = 4
+      const totalChunks = Math.ceil(totalWeeks / weeksPerChunk)
 
-      setGeneratingStep('Lagrer planer...')
+      // Initialize progress
+      setChunkProgress({
+        currentChunk: 0,
+        totalChunks,
+        completedWeeks: 0,
+        totalWeeks
+      })
 
-      // Håndter flerukers planer
-      if (planData.weeks && Array.isArray(planData.weeks)) {
-        // Ny flerukers struktur
-        const startMonday = getNextMonday()
+      let contextForNextChunk = null
+      let lastWeekSummary = null
+      const startMonday = getNextMonday()
 
-        // Lagre alle ukene
-        for (let i = 0; i < planData.weeks.length; i++) {
-          const week = planData.weeks[i]
+      // Generate chunks sequentially
+      for (let chunkNum = 1; chunkNum <= totalChunks; chunkNum++) {
+        const startWeek = (chunkNum - 1) * weeksPerChunk + 1
+        const weeksInThisChunk = Math.min(weeksPerChunk, totalWeeks - (chunkNum - 1) * weeksPerChunk)
 
-          // Beregn riktig mandag for denne uken
+        // Update progress
+        setChunkProgress(prev => ({ ...prev, currentChunk: chunkNum }))
+        setGeneratingStep(
+          `Genererer uker ${startWeek}-${startWeek + weeksInThisChunk - 1}... ` +
+          `(chunk ${chunkNum}/${totalChunks})`
+        )
+
+        // Prepare chunk info (null for first chunk)
+        const chunkInfo = chunkNum === 1 ? null : {
+          chunkNumber: chunkNum,
+          totalChunks: totalChunks,
+          weeksPerChunk: weeksPerChunk,
+          startWeek: startWeek,
+          previousWeekSummary: lastWeekSummary,
+          overallStrategy: contextForNextChunk.overallStrategy,
+          phaseGuidelines: contextForNextChunk.phaseGuidelines
+        }
+
+        // Generate this chunk
+        const chunkData = await generateTrainingPlanChunk({
+          userData,
+          chunkInfo
+        })
+
+        // Store context from first chunk
+        if (chunkNum === 1) {
+          contextForNextChunk = {
+            overallStrategy: chunkData.overallStrategy,
+            milestones: chunkData.milestones,
+            phaseGuidelines: chunkData.phaseGuidelines
+          }
+          setPlanContext(contextForNextChunk)
+        }
+
+        // Save weeks from this chunk
+        setGeneratingStep(`Lagrer uker ${startWeek}-${startWeek + chunkData.weeks.length - 1}...`)
+
+        for (let i = 0; i < chunkData.weeks.length; i++) {
+          const week = chunkData.weeks[i]
+          const weekNumber = startWeek + i
+
+          // Calculate monday for this week
           const weekMonday = new Date(startMonday)
-          weekMonday.setDate(startMonday.getDate() + (i * 7))
+          weekMonday.setDate(startMonday.getDate() + ((weekNumber - 1) * 7))
 
           const weekPlan = {
-            weekNumber: week.weekNumber,
+            weekNumber: weekNumber,
             phase: week.phase,
             focus: week.focus,
             totalLoad: week.totalLoad,
@@ -118,46 +173,68 @@ export default function AIPlanner() {
             weekStart: weekMonday.toISOString(),
             generatedBy: 'ai',
             wizardAnswers: wizardAnswers,
-            planDuration: planData.planDuration,
-            overallStrategy: planData.overallStrategy,
-            milestones: planData.milestones
+            planDuration: totalWeeks,
+            overallStrategy: contextForNextChunk.overallStrategy,
+            milestones: contextForNextChunk.milestones
           }
 
           await savePlan(weekPlan)
-          setGeneratingStep(`Lagret uke ${i + 1}/${planData.weeks.length}...`)
-        }
 
-        // Vis første uke umiddelbart
-        setGeneratedPlan({
-          ...planData.weeks[0],
-          weekStart: startMonday.toISOString(),
-          generatedBy: 'ai'
-        })
-      } else {
-        // Gammel enkeltuke-struktur (backwards compatibility)
-        const monday = getNextMonday()
-        const savedPlan = {
-          ...planData,
-          weekStart: monday.toISOString(),
-          generatedBy: 'ai',
-          wizardAnswers: wizardAnswers
+          // Update progress
+          setChunkProgress(prev => ({
+            ...prev,
+            completedWeeks: prev.completedWeeks + 1
+          }))
+
+          // Store summary for next chunk's context
+          if (i === chunkData.weeks.length - 1) {
+            lastWeekSummary = {
+              weekNumber: weekNumber,
+              phase: week.phase,
+              totalLoad: week.totalLoad,
+              keyWorkouts: week.sessions
+                .filter(s => ['long_run', 'tempo', 'interval'].includes(s.type))
+                .map(s => s.title)
+                .slice(0, 3)
+            }
+          }
+
+          setGeneratingStep(
+            `Lagret uke ${weekNumber}/${totalWeeks} ` +
+            `(chunk ${chunkNum}/${totalChunks})`
+          )
         }
-        await savePlan(savedPlan)
-        setGeneratedPlan(savedPlan)
       }
 
+      // Success!
       setGeneratingStep('Ferdig!')
       setJustSaved(true)
-      toast.success(`🎯 ${planData.weeks?.length || 1} ukers plan generert!`)
+      toast.success(`🎯 ${totalWeeks} ukers plan generert!`)
+
+      // Vis første uke
+      setGeneratedPlan(null) // Let currentPlan show automatically
 
       // Skjul suksessmeldingen etter 5 sekunder
       setTimeout(() => setJustSaved(false), 5000)
     } catch (err) {
-      setError(err.message)
+      console.error('Plan generation error:', err)
+      setError(err.message || 'Kunne ikke generere treningsplan')
+      toast.error('Noe gikk galt ved generering av plan')
     } finally {
       setGenerating(false)
       setGeneratingStep('')
     }
+  }
+
+  // Calculate total weeks based on wizard answers
+  function calculateTotalWeeks(wizardAnswers) {
+    if (wizardAnswers.goal === 'race' && wizardAnswers.raceDetails?.date) {
+      const raceDate = new Date(wizardAnswers.raceDetails.date)
+      const today = new Date()
+      const weeksUntilRace = Math.ceil((raceDate - today) / (7 * 24 * 60 * 60 * 1000))
+      return Math.min(weeksUntilRace, 24)  // Max 24 weeks
+    }
+    return 12  // Default 12 weeks for non-race goals
   }
 
   const handleRegeneratePlan = () => {
@@ -335,10 +412,30 @@ export default function AIPlanner() {
           aria-live="polite"
           aria-label="Genererer treningsplan"
         >
-          <div className="flex flex-col items-center gap-3 py-2">
+          <div className="flex flex-col items-center gap-3 py-4">
             <div className="spinner" aria-hidden="true" />
-            <p className="text-secondary font-medium">{generatingStep}</p>
-            <p className="text-xs text-text-muted">Dette kan ta 10-30 sekunder...</p>
+            <p className="text-secondary font-medium text-center px-4">{generatingStep}</p>
+
+            {/* Progress bar */}
+            {chunkProgress.totalChunks > 0 && (
+              <div className="w-full max-w-md px-4">
+                <div className="flex justify-between text-xs text-text-muted mb-1">
+                  <span>Chunk {chunkProgress.currentChunk} av {chunkProgress.totalChunks}</span>
+                  <span>{chunkProgress.completedWeeks}/{chunkProgress.totalWeeks} uker</span>
+                </div>
+                <div className="h-2 bg-background-secondary rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-primary to-secondary transition-all duration-300"
+                    style={{
+                      width: `${(chunkProgress.completedWeeks / chunkProgress.totalWeeks) * 100}%`
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-text-muted text-center mt-2">
+                  Dette kan ta 1-3 minutter...
+                </p>
+              </div>
+            )}
           </div>
         </div>
       ) : (

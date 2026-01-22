@@ -103,7 +103,7 @@ export const handler = async (event) => {
       throw new Error('Request body is required')
     }
 
-    const { userData, type = 'generate' } = JSON.parse(event.body)
+    const { userData, type = 'generate', chunkInfo = null } = JSON.parse(event.body)
 
     if (!userData) {
       throw new Error('userData is required in request body')
@@ -144,8 +144,8 @@ Gi 2-3 konkrete justeringsforslag i JSON-format:
   ]
 }`
     } else {
-      // Generate training plan
-      prompt = buildUserPrompt(userData)
+      // Generate training plan (chunked or full)
+      prompt = buildUserPrompt(userData, chunkInfo)
     }
 
     // Call Anthropic API with error handling
@@ -212,7 +212,7 @@ Gi 2-3 konkrete justeringsforslag i JSON-format:
 /**
  * Build user prompt with all relevant data
  */
-function buildUserPrompt(userData) {
+function buildUserPrompt(userData, chunkInfo = null) {
   const {
     planType = 'full_plan',
     goal = {},
@@ -284,6 +284,49 @@ Lag en komplett treningsplan som inkluderer både løping OG styrke/Hyrox/CrossF
 - Unngå overtrening ved å spre hard trening
 `
 
+  // Handle chunk mode
+  if (chunkInfo) {
+    const weeksInChunk = chunkInfo.weeksPerChunk
+    const startWeek = chunkInfo.startWeek
+    const endWeek = startWeek + weeksInChunk - 1
+    const totalWeeks = chunkInfo.totalChunks * chunkInfo.weeksPerChunk
+
+    return `
+Lag uker ${startWeek}-${endWeek} av en ${totalWeeks}-ukers treningsplan (chunk ${chunkInfo.chunkNumber} av ${chunkInfo.totalChunks}).
+
+${goalInfo}
+
+${planTypeInstructions}
+
+**TILGJENGELIGHET:**
+- Dager per uke: ${daysPerWeek}
+- Foretrukne dager: ${availableDays.join(', ')}
+- Maks tid per økt: ${maxSessionDuration} minutter
+
+**KONTEKST FRA FORRIGE UKE:**
+${JSON.stringify(chunkInfo.previousWeekSummary, null, 2)}
+
+**OVERORDNET STRATEGI (FØLG DENNE):**
+${chunkInfo.overallStrategy}
+
+**FASEPLAN:**
+${JSON.stringify(chunkInfo.phaseGuidelines, null, 2)}
+
+**VIKTIGE INSTRUKSJONER:**
+- Generer uker ${startWeek}-${endWeek} som bygger logisk videre fra uke ${chunkInfo.previousWeekSummary.weekNumber}
+- Følg den overordnede strategien
+- Hold riktig fase i henhold til faseplanen
+- Respekter 10%-regelen for volumøkning
+- Sørg for naturlig progresjon fra forrige uke
+
+Returner JSON:
+{
+  "weeks": [${weeksInChunk} uker med weekNumber ${startWeek} til ${endWeek}]
+}
+`
+  }
+
+  // Standard full plan generation
   return `
 Lag en treningsplan for ${weeksToGenerate} uker fremover basert på følgende informasjon:
 
@@ -331,5 +374,24 @@ VIKTIG INSTRUKSJON: Lag en komplett ${weeksToGenerate}-ukers plan med følgende:
    - Hvis konkurranse: bygg mot distansen og ønsket intensitet
 
 Returner en komplett JSON-struktur med alle ${weeksToGenerate} ukene detaljert beskrevet.
+
+**FOR FLERUKERS PLANER (hvis dette er første chunk):**
+Inkluder også:
+- "overallStrategy": Overordnet strategi for hele perioden
+- "phaseGuidelines": Faseinndeling med phases-array som viser hvilke uker som har hvilken fase
+- "milestones": Viktige milepæler
+
+JSON format:
+{
+  "weeks": [...],
+  "overallStrategy": "...",
+  "phaseGuidelines": {
+    "phases": [
+      {"phase": "base", "weeks": "1-8"},
+      {"phase": "build", "weeks": "9-16"}
+    ]
+  },
+  "milestones": [...]
+}
 `
 }

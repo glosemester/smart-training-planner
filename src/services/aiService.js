@@ -47,6 +47,55 @@ export async function generateTrainingPlan(userData) {
 }
 
 /**
+ * Generate training plan in chunks (for multi-week plans)
+ * @param {Object} params - Parameters
+ * @param {Object} params.userData - User data for plan generation
+ * @param {Object} params.chunkInfo - Chunk context (null for first chunk)
+ * @returns {Promise<Object>} Chunk response with weeks and optional strategy
+ */
+export async function generateTrainingPlanChunk({ userData, chunkInfo }) {
+  try {
+    const response = await fetch('/.netlify/functions/generate-plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userData,
+        type: 'generate',
+        chunkInfo  // null for first chunk, context object for others
+      })
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+
+      // Handle specific error codes
+      if (response.status === 504) {
+        throw new Error('Generering tok for lang tid. Prøver igjen...')
+      } else if (response.status === 500) {
+        throw new Error(errorData.error || 'Server-feil. Prøv igjen om litt.')
+      } else if (response.status === 429) {
+        throw new Error('For mange forespørsler. Vent litt før du prøver igjen.')
+      } else if (response.status === 503) {
+        throw new Error('Tjenesten er utilgjengelig. Prøv igjen senere.')
+      }
+
+      throw new Error(errorData.error || `Nettverksfeil (${response.status}). Prøv igjen.`)
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Chunk generation error:', error)
+
+    // Handle network errors
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Ingen nettverkstilkobling. Sjekk internett-tilkoblingen din.')
+    }
+
+    throw error
+  }
+}
+
+/**
  * Få AI-forslag til justeringer basert på avvik
  */
 export async function getAdjustmentSuggestions(originalPlan, actualWorkouts) {
@@ -90,5 +139,6 @@ export async function getAdjustmentSuggestions(originalPlan, actualWorkouts) {
 
 export default {
   generateTrainingPlan,
+  generateTrainingPlanChunk,
   getAdjustmentSuggestions
 }
