@@ -1,11 +1,10 @@
 import { Outlet } from 'react-router-dom'
 import Header from './Header'
 import Navigation from './Navigation'
-import QuickActions from '../common/QuickActions'
 
 export default function Layout() {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-white dark:bg-background flex flex-col">
       {/* Header */}
       <Header />
 
@@ -15,9 +14,6 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
-
-      {/* Quick Actions FAB */}
-      <QuickActions />
 
       {/* Bottom navigation */}
       <Navigation />
