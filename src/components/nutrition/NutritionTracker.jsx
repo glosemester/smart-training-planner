@@ -6,6 +6,7 @@ import { format, isToday } from 'date-fns'
 import { nb } from 'date-fns/locale'
 import LogMealModal from './LogMealModal'
 import MealCard from './MealCard'
+import NutritionAI from './NutritionAI'
 
 export default function NutritionTracker() {
   const { meals, loading, getMealsForDate } = useNutrition()
@@ -172,6 +173,9 @@ export default function NutritionTracker() {
           </div>
         </div>
       </div>
+
+      {/* Nutrition AI */}
+      <NutritionAI />
 
       {/* Date Selector */}
       <div className="flex items-center gap-2">
