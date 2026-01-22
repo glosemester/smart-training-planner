@@ -47,13 +47,37 @@ export default function UpdatePrompt() {
       setUpdating(true)
       setError(null)
 
-      // updateServiceWorker(true) will skip waiting and reload the page automatically
-      // No need for manual reload - let vite-plugin-pwa handle it
-      await updateServiceWorker(true)
+      // Hide prompt immediately to prevent showing it again after reload
+      setShowPrompt(false)
+
+      // Set a timeout to force reload if updateServiceWorker hangs
+      const timeoutId = setTimeout(() => {
+        console.log('Update timeout - forcing reload')
+        window.location.reload()
+      }, 3000) // 3 second timeout
+
+      try {
+        // updateServiceWorker(true) will skip waiting and reload the page automatically
+        await updateServiceWorker(true)
+        clearTimeout(timeoutId)
+      } catch (err) {
+        clearTimeout(timeoutId)
+        throw err
+      }
+
+      // If we get here and page hasn't reloaded, force it
+      setTimeout(() => {
+        window.location.reload()
+      }, 500)
+
     } catch (err) {
       console.error('Update failed:', err)
-      setError('Oppdatering feilet. Prøv å laste siden på nytt manuelt.')
-      setUpdating(false)
+      setError('Oppdatering feilet. Laster på nytt...')
+
+      // Force reload even on error after showing message briefly
+      setTimeout(() => {
+        window.location.reload()
+      }, 1500)
     }
   }
 
