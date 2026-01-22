@@ -90,24 +90,64 @@ export default function AIPlanner() {
       }
 
       setGeneratingStep('Genererer personlig treningsplan...')
-      const plan = await generateTrainingPlan(userData)
+      const planData = await generateTrainingPlan(userData)
 
-      setGeneratingStep('Lagrer plan...')
+      setGeneratingStep('Lagrer planer...')
 
-      // Automatisk lagre planen til Firestore
-      const monday = getNextMonday()
-      const savedPlan = {
-        ...plan,
-        weekStart: monday.toISOString(),
-        generatedBy: 'ai',
-        wizardAnswers: wizardAnswers // Lagre preferanser for fremtidig bruk
+      // Håndter flerukers planer
+      if (planData.weeks && Array.isArray(planData.weeks)) {
+        // Ny flerukers struktur
+        const startMonday = getNextMonday()
+
+        // Lagre alle ukene
+        for (let i = 0; i < planData.weeks.length; i++) {
+          const week = planData.weeks[i]
+
+          // Beregn riktig mandag for denne uken
+          const weekMonday = new Date(startMonday)
+          weekMonday.setDate(startMonday.getDate() + (i * 7))
+
+          const weekPlan = {
+            weekNumber: week.weekNumber,
+            phase: week.phase,
+            focus: week.focus,
+            totalLoad: week.totalLoad,
+            sessions: week.sessions,
+            weeklyTips: week.weeklyTips,
+            weekStart: weekMonday.toISOString(),
+            generatedBy: 'ai',
+            wizardAnswers: wizardAnswers,
+            planDuration: planData.planDuration,
+            overallStrategy: planData.overallStrategy,
+            milestones: planData.milestones
+          }
+
+          await savePlan(weekPlan)
+          setGeneratingStep(`Lagret uke ${i + 1}/${planData.weeks.length}...`)
+        }
+
+        // Vis første uke umiddelbart
+        setGeneratedPlan({
+          ...planData.weeks[0],
+          weekStart: startMonday.toISOString(),
+          generatedBy: 'ai'
+        })
+      } else {
+        // Gammel enkeltuke-struktur (backwards compatibility)
+        const monday = getNextMonday()
+        const savedPlan = {
+          ...planData,
+          weekStart: monday.toISOString(),
+          generatedBy: 'ai',
+          wizardAnswers: wizardAnswers
+        }
+        await savePlan(savedPlan)
+        setGeneratedPlan(savedPlan)
       }
-      await savePlan(savedPlan)
 
-      // Vis planen umiddelbart mens vi venter på Firestore oppdatering
-      setGeneratedPlan(savedPlan)
       setGeneratingStep('Ferdig!')
       setJustSaved(true)
+      toast.success(`🎯 ${planData.weeks?.length || 1} ukers plan generert!`)
 
       // Skjul suksessmeldingen etter 5 sekunder
       setTimeout(() => setJustSaved(false), 5000)

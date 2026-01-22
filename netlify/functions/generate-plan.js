@@ -28,37 +28,46 @@ For ultramarathon-distanser følger du disse ekstra prinsippene:
 
 Du kommuniserer på norsk og gir konkrete, praktiske råd.
 
-Output-format: Returner alltid en strukturert JSON med følgende format:
+Output-format: Returner alltid en strukturert JSON med følgende format for FLERUKERS planlegging:
 {
-  "weekNumber": number,
-  "focus": "string beskrivelse av ukens fokus",
-  "totalLoad": {
-    "running_km": number,
-    "strength_sessions": number,
-    "estimated_hours": number
-  },
-  "sessions": [
+  "planDuration": number (antall uker totalt),
+  "goalInfo": "string - oppsummering av mål og periode",
+  "weeks": [
     {
-      "day": "monday|tuesday|wednesday|thursday|friday|saturday|sunday",
-      "type": "easy_run|tempo|interval|long_run|hyrox|crossfit|strength|rest|recovery",
-      "title": "string - kort beskrivende tittel",
-      "description": "string - detaljert beskrivelse av økten",
-      "duration_minutes": number,
-      "details": {
-        // For løping:
-        "distance_km": number,
-        "pace_zone": "Z1|Z2|Z3|Z4|Z5",
-        "intervals": "string beskrivelse hvis aktuelt",
-
-        // For styrke/hyrox/crossfit:
-        "exercises": ["øvelse1", "øvelse2"],
-        "format": "string - f.eks. EMOM, AMRAP, For Time"
+      "weekNumber": number (1, 2, 3...),
+      "weekStartDate": "ISO date string for mandagen i uken",
+      "phase": "base|build|peak|taper",
+      "focus": "string beskrivelse av ukens fokus",
+      "totalLoad": {
+        "running_km": number,
+        "strength_sessions": number,
+        "estimated_hours": number
       },
-      "rationale": "string forklaring på hvorfor denne økten passer her"
+      "sessions": [
+        {
+          "day": "monday|tuesday|wednesday|thursday|friday|saturday|sunday",
+          "type": "easy_run|tempo|interval|long_run|hyrox|crossfit|strength|rest|recovery",
+          "title": "string - kort beskrivende tittel",
+          "description": "string - detaljert beskrivelse av økten",
+          "duration_minutes": number,
+          "details": {
+            // For løping:
+            "distance_km": number,
+            "pace_zone": "Z1|Z2|Z3|Z4|Z5",
+            "intervals": "string beskrivelse hvis aktuelt",
+
+            // For styrke/hyrox/crossfit:
+            "exercises": ["øvelse1", "øvelse2"],
+            "format": "string - f.eks. EMOM, AMRAP, For Time"
+          },
+          "rationale": "string forklaring på hvorfor denne økten passer her"
+        }
+      ],
+      "weeklyTips": ["string tips for uken"]
     }
   ],
-  "weeklyTips": ["string tips for uken"],
-  "adjustmentSuggestions": ["string forslag til justering hvis nødvendig"]
+  "overallStrategy": "string - overordnet strategi for hele perioden",
+  "milestones": ["string - viktige milepæler i planen"]
 }`
 
 export const handler = async (event) => {
@@ -144,7 +153,7 @@ Gi 2-3 konkrete justeringsforslag i JSON-format:
     try {
       message = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
+        max_tokens: 8000, // Increased for multi-week plans
         system: type === 'adjust' ? undefined : TRAINING_SYSTEM_PROMPT,
         messages: [
           { role: 'user', content: prompt }
@@ -224,12 +233,17 @@ function buildUserPrompt(userData) {
     rpe: w.rpe
   }))
 
-  // Beregn konkurransedato info
+  // Beregn konkurransedato info og antall uker
   let goalInfo = ''
+  let weeksToGenerate = 12 // Standard 12 uker hvis ingen konkurranse
+
   if (goal.type === 'race' && goal.date) {
     const raceDate = new Date(goal.date)
     const today = new Date()
     const weeksUntilRace = Math.ceil((raceDate - today) / (7 * 24 * 60 * 60 * 1000))
+
+    // Generer plan frem til konkurransen
+    weeksToGenerate = Math.min(weeksUntilRace, 24) // Maks 24 uker (ca 6 måneder)
 
     // Handle custom distance
     const distanceDisplay = goal.distance === 'custom' && goal.customDistance
@@ -247,7 +261,7 @@ function buildUserPrompt(userData) {
 - Uker til konkurranse: ${weeksUntilRace}
 ${goal.goalTime ? `- Målsetting: ${goal.goalTime}` : ''}
 
-VIKTIG: Dette er uke ${weeksUntilRace > 12 ? 'base building' : weeksUntilRace > 4 ? 'build-up' : weeksUntilRace > 1 ? 'peak' : 'taper'} fase.
+VIKTIG: Lag en periodisert plan som bygger opp mot konkurransen med riktig progresjon og taper.
 ${isUltra ? 'Dette er en ULTRAMARATHON - følg ultramarathon-spesifikke prinsipper!' : ''}`
   } else {
     goalInfo = `**MÅL:** ${goal.type === 'general_fitness' ? 'Generell form' : goal.type === 'distance' ? 'Løpe lengre distanser' : goal.type === 'speed' ? 'Bli raskere' : 'Ikke spesifisert'}`
@@ -271,7 +285,7 @@ Lag en komplett treningsplan som inkluderer både løping OG styrke/Hyrox/CrossF
 `
 
   return `
-Lag en treningsplan for kommende uke basert på følgende informasjon:
+Lag en treningsplan for ${weeksToGenerate} uker fremover basert på følgende informasjon:
 
 ${goalInfo}
 
@@ -294,11 +308,28 @@ ${workoutSummary.length > 0 ? JSON.stringify(workoutSummary, null, 2) : 'Ingen t
 **PREFERANSER:**
 ${preferences || 'Ingen spesielle preferanser'}
 
-Lag en balansert treningsuke som:
-1. Respekterer brukerens tilgjengelighet og preferanser
-2. Bygger mot målet (periodisering hvis konkurranse)
-3. Følger 80/20-prinsippet for løping
-4. Balanserer belastning og restitusjon
-5. Tilpasser seg brukerens nåværende form basert på siste økter
+VIKTIG INSTRUKSJON: Lag en komplett ${weeksToGenerate}-ukers plan med følgende:
+
+1. **Periodisering**: Strukturer ukene i faser:
+   - Base phase (grunntrening): Bygg volum og aerob base
+   - Build phase (oppbygging): Øk intensitet og spesifisitet
+   - Peak phase (topp): Høyeste belastning
+   - Taper phase (nedtrapping): Reduser volum før konkurranse (hvis aktuelt)
+
+2. **Progresjon**:
+   - Gradvis øk volum (maks 10% per uke)
+   - Balanser harde og lette uker (3:1 ratio)
+   - Hver 4. uke bør være en recovery-uke med redusert volum
+
+3. **Variasjon**:
+   - Variere treningstyper for å unngå monotoni
+   - Respekter 80/20-prinsippet for løping
+   - Balansér styrke og løping
+
+4. **Spesifisitet**:
+   - Gjør treningen mer spesifikk mot målet over tid
+   - Hvis konkurranse: bygg mot distansen og ønsket intensitet
+
+Returner en komplett JSON-struktur med alle ${weeksToGenerate} ukene detaljert beskrevet.
 `
 }
