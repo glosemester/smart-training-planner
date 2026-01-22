@@ -59,8 +59,7 @@ Output-format: Returner alltid en strukturert JSON med følgende format for FLER
             // For styrke/hyrox/crossfit:
             "exercises": ["øvelse1", "øvelse2"],
             "format": "string - f.eks. EMOM, AMRAP, For Time"
-          },
-          "rationale": "string forklaring på hvorfor denne økten passer her"
+          }
         }
       ],
       "weeklyTips": ["string tips for uken"]
