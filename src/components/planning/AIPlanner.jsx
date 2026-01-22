@@ -485,9 +485,8 @@ function DraggableSessionCard({ session, onEdit, onDelete, onView, isEditable })
       style={style}
       className={`bg-background-secondary border border-white/10 rounded-xl p-3 ${
         session.completed ? 'opacity-60' : ''
-      } cursor-pointer hover:border-primary/30 transition-colors`}
+      } transition-colors`}
       aria-label={`Treningsøkt: ${session.title}`}
-      onClick={() => onView && onView(session)}
     >
       <div className="flex items-start gap-3">
         {/* Drag handle */}
@@ -495,7 +494,6 @@ function DraggableSessionCard({ session, onEdit, onDelete, onView, isEditable })
           <button
             {...attributes}
             {...listeners}
-            onClick={(e) => e.stopPropagation()}
             className="cursor-grab active:cursor-grabbing text-text-muted hover:text-text-primary mt-1"
             aria-label="Dra for å flytte økt"
           >
@@ -535,24 +533,36 @@ function DraggableSessionCard({ session, onEdit, onDelete, onView, isEditable })
         </div>
 
         {/* Actions */}
-        {isEditable && (
-          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-            <button
-              onClick={() => onEdit(session)}
-              className="p-1.5 text-text-muted hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
-              aria-label="Rediger økt"
-            >
-              <Edit2 size={14} />
-            </button>
-            <button
-              onClick={() => onDelete(session.id)}
-              className="p-1.5 text-text-muted hover:text-error hover:bg-error/10 rounded-lg transition-colors"
-              aria-label="Slett økt"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-1">
+          {/* View details button */}
+          <button
+            onClick={() => onView && onView(session)}
+            className="p-1.5 text-text-muted hover:text-secondary hover:bg-secondary/10 rounded-lg transition-colors"
+            aria-label="Se detaljer"
+            title="Se detaljer"
+          >
+            <Info size={14} />
+          </button>
+
+          {isEditable && (
+            <>
+              <button
+                onClick={() => onEdit(session)}
+                className="p-1.5 text-text-muted hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                aria-label="Rediger økt"
+              >
+                <Edit2 size={14} />
+              </button>
+              <button
+                onClick={() => onDelete(session.id)}
+                className="p-1.5 text-text-muted hover:text-error hover:bg-error/10 rounded-lg transition-colors"
+                aria-label="Slett økt"
+              >
+                <Trash2 size={14} />
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </article>
   )
