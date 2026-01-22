@@ -19,16 +19,9 @@ export default function UpdatePrompt() {
     updateServiceWorker,
   } = useRegisterSW({
     onRegistered(r) {
-      // Sjekk for oppdateringer hver time
       console.log('SW Registered:', r)
-      if (r) {
-        setInterval(() => {
-          console.log('Checking for updates...')
-          r.update().catch(err => {
-            console.error('Update check failed:', err)
-          })
-        }, 60 * 60 * 1000) // Sjekk hver time
-      }
+      // vite-plugin-pwa handles update checking automatically
+      // No need for manual setInterval - it causes memory leaks and update loops
     },
     onRegisterError(error) {
       console.log('SW registration error', error)
@@ -54,16 +47,9 @@ export default function UpdatePrompt() {
       setUpdating(true)
       setError(null)
 
-      // For iOS: Force a hard reload after service worker update
-      if (isIOS()) {
-        await updateServiceWorker(true)
-        // Wait a bit for SW to activate
-        setTimeout(() => {
-          window.location.reload()
-        }, 500)
-      } else {
-        await updateServiceWorker(true)
-      }
+      // updateServiceWorker(true) will skip waiting and reload the page automatically
+      // No need for manual reload - let vite-plugin-pwa handle it
+      await updateServiceWorker(true)
     } catch (err) {
       console.error('Update failed:', err)
       setError('Oppdatering feilet. Prøv å laste siden på nytt manuelt.')
