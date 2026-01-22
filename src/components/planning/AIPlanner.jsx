@@ -3,11 +3,13 @@ import { useAuth } from '../../hooks/useAuth'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { generateTrainingPlan } from '../../services/aiService'
 import { getWorkoutType } from '../../data/workoutTypes'
-import { Brain, Sparkles, RefreshCw, Check, Clock, MapPin, Edit2, Trash2, Plus, GripVertical, Image as ImageIcon } from 'lucide-react'
+import { Brain, Sparkles, RefreshCw, Check, Clock, MapPin, Edit2, Trash2, Plus, GripVertical, Image as ImageIcon, FileDown, X, Info } from 'lucide-react'
 import PlanningWizard from './PlanningWizard'
 import PlanAnalysis from './PlanAnalysis'
 import ImageUpload from '../common/ImageUpload'
 import { scanWorkout } from '../../services/workoutScanService'
+import { exportPlanToPDF } from '../../utils/planExport'
+import { toast } from 'react-hot-toast'
 import {
   DndContext,
   closestCenter,
@@ -39,6 +41,7 @@ export default function AIPlanner() {
   const [justSaved, setJustSaved] = useState(false)
   const [editingSession, setEditingSession] = useState(null)
   const [addingSessionDay, setAddingSessionDay] = useState(null)
+  const [viewingSession, setViewingSession] = useState(null)
 
   // Drag and drop sensors
   const sensors = useSensors(
@@ -301,6 +304,22 @@ export default function AIPlanner() {
                   </p>
                 )}
               </div>
+              <button
+                onClick={() => {
+                  try {
+                    exportPlanToPDF(displayPlan, displayPlan.weekStart || new Date().toISOString())
+                    toast.success('📄 Plan eksportert til PDF!')
+                  } catch (error) {
+                    console.error('PDF export error:', error)
+                    toast.error('Kunne ikke eksportere PDF')
+                  }
+                }}
+                className="btn-secondary flex items-center gap-2 ml-3"
+                title="Eksporter plan til PDF"
+              >
+                <FileDown size={18} />
+                <span className="hidden sm:inline">Eksporter PDF</span>
+              </button>
             </div>
           </div>
 
@@ -314,6 +333,7 @@ export default function AIPlanner() {
                   sessions={sessionsByDay[day] || []}
                   onEdit={setEditingSession}
                   onDelete={handleDeleteSession}
+                  onView={setViewingSession}
                   onAddSession={() => setAddingSessionDay(day)}
                   isEditable={!!currentPlan}
                 />
@@ -358,6 +378,14 @@ export default function AIPlanner() {
         </div>
       )}
 
+      {/* Session Detail Modal */}
+      {viewingSession && (
+        <SessionDetailModal
+          session={viewingSession}
+          onClose={() => setViewingSession(null)}
+        />
+      )}
+
       {/* Edit Session Modal */}
       {editingSession && (
         <EditSessionModal
@@ -380,7 +408,7 @@ export default function AIPlanner() {
 }
 
 // DayColumn component for grouping sessions by day
-function DayColumn({ day, sessions, onEdit, onDelete, onAddSession, isEditable }) {
+function DayColumn({ day, sessions, onEdit, onDelete, onView, onAddSession, isEditable }) {
   const dayNames = {
     monday: 'Mandag',
     tuesday: 'Tirsdag',
@@ -423,6 +451,7 @@ function DayColumn({ day, sessions, onEdit, onDelete, onAddSession, isEditable }
               session={session}
               onEdit={onEdit}
               onDelete={onDelete}
+              onView={onView}
               isEditable={isEditable}
             />
           ))
@@ -433,7 +462,7 @@ function DayColumn({ day, sessions, onEdit, onDelete, onAddSession, isEditable }
 }
 
 // Draggable Session Card
-function DraggableSessionCard({ session, onEdit, onDelete, isEditable }) {
+function DraggableSessionCard({ session, onEdit, onDelete, onView, isEditable }) {
   const {
     attributes,
     listeners,
@@ -456,8 +485,9 @@ function DraggableSessionCard({ session, onEdit, onDelete, isEditable }) {
       style={style}
       className={`bg-background-secondary border border-white/10 rounded-xl p-3 ${
         session.completed ? 'opacity-60' : ''
-      }`}
+      } cursor-pointer hover:border-primary/30 transition-colors`}
       aria-label={`Treningsøkt: ${session.title}`}
+      onClick={() => onView && onView(session)}
     >
       <div className="flex items-start gap-3">
         {/* Drag handle */}
@@ -465,6 +495,7 @@ function DraggableSessionCard({ session, onEdit, onDelete, isEditable }) {
           <button
             {...attributes}
             {...listeners}
+            onClick={(e) => e.stopPropagation()}
             className="cursor-grab active:cursor-grabbing text-text-muted hover:text-text-primary mt-1"
             aria-label="Dra for å flytte økt"
           >
@@ -505,7 +536,7 @@ function DraggableSessionCard({ session, onEdit, onDelete, isEditable }) {
 
         {/* Actions */}
         {isEditable && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={() => onEdit(session)}
               className="p-1.5 text-text-muted hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
@@ -736,6 +767,137 @@ function AddSessionModal({ day, onSave, onCancel }) {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+// Session Detail Modal
+function SessionDetailModal({ session, onClose }) {
+  const type = getWorkoutType(session.type)
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+      <div className="bg-white dark:bg-background-card rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl">
+        {/* Header */}
+        <div className="sticky top-0 bg-white dark:bg-background-card border-b border-gray-200 dark:border-white/10 p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-12 h-12 rounded-xl flex items-center justify-center text-xl"
+              style={{ backgroundColor: `${type.color}20` }}
+            >
+              {type.icon}
+            </div>
+            <div>
+              <h2 className="font-heading font-bold text-lg text-gray-900 dark:text-text-primary">
+                {session.title}
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-text-muted">{type.name}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors"
+            aria-label="Lukk"
+          >
+            <X size={20} className="text-gray-600 dark:text-text-muted" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-6">
+          {/* Quick info */}
+          <div className="flex gap-4">
+            <div className="flex items-center gap-2 text-gray-700 dark:text-text-secondary">
+              <Clock size={18} className="text-primary" />
+              <span className="font-medium">{session.duration_minutes} min</span>
+            </div>
+            {session.details?.distance_km && (
+              <div className="flex items-center gap-2 text-gray-700 dark:text-text-secondary">
+                <MapPin size={18} className="text-primary" />
+                <span className="font-medium">{session.details.distance_km} km</span>
+              </div>
+            )}
+          </div>
+
+          {/* Description */}
+          {session.description && (
+            <div>
+              <h3 className="font-heading font-semibold text-gray-900 dark:text-text-primary mb-2 flex items-center gap-2">
+                <Info size={18} className="text-primary" />
+                Beskrivelse
+              </h3>
+              <p className="text-gray-700 dark:text-text-secondary whitespace-pre-wrap leading-relaxed">
+                {session.description}
+              </p>
+            </div>
+          )}
+
+          {/* Details */}
+          {session.details && (
+            <div>
+              <h3 className="font-heading font-semibold text-gray-900 dark:text-text-primary mb-3">
+                Detaljer
+              </h3>
+              <div className="space-y-2">
+                {session.details.target_pace && (
+                  <div className="flex justify-between py-2 border-b border-gray-200 dark:border-white/10">
+                    <span className="text-gray-600 dark:text-text-muted">Mål tempo</span>
+                    <span className="font-medium text-gray-900 dark:text-text-primary">
+                      {session.details.target_pace}
+                    </span>
+                  </div>
+                )}
+                {session.details.intensity && (
+                  <div className="flex justify-between py-2 border-b border-gray-200 dark:border-white/10">
+                    <span className="text-gray-600 dark:text-text-muted">Intensitet</span>
+                    <span className="font-medium text-gray-900 dark:text-text-primary">
+                      {session.details.intensity}
+                    </span>
+                  </div>
+                )}
+                {session.details.warmup && (
+                  <div className="flex justify-between py-2 border-b border-gray-200 dark:border-white/10">
+                    <span className="text-gray-600 dark:text-text-muted">Oppvarming</span>
+                    <span className="font-medium text-gray-900 dark:text-text-primary">
+                      {session.details.warmup}
+                    </span>
+                  </div>
+                )}
+                {session.details.cooldown && (
+                  <div className="flex justify-between py-2 border-b border-gray-200 dark:border-white/10">
+                    <span className="text-gray-600 dark:text-text-muted">Nedkjøling</span>
+                    <span className="font-medium text-gray-900 dark:text-text-primary">
+                      {session.details.cooldown}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Additional notes */}
+          {session.notes && (
+            <div className="bg-gray-50 dark:bg-white/5 rounded-xl p-4">
+              <h3 className="font-heading font-semibold text-gray-900 dark:text-text-primary mb-2">
+                Notater
+              </h3>
+              <p className="text-sm text-gray-700 dark:text-text-secondary">
+                {session.notes}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-white dark:bg-background-card border-t border-gray-200 dark:border-white/10 p-4">
+          <button
+            onClick={onClose}
+            className="btn-primary w-full"
+          >
+            Lukk
+          </button>
+        </div>
       </div>
     </div>
   )
