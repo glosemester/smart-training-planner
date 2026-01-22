@@ -7,6 +7,7 @@ import {
 } from 'recharts'
 import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, subWeeks, subMonths } from 'date-fns'
 import { nb } from 'date-fns/locale'
+import PlanAdherenceDashboard from './PlanAdherenceDashboard'
 
 export default function Statistics() {
   const { workouts, getStats, currentPlan } = useWorkouts()
@@ -198,6 +199,9 @@ export default function Statistics() {
           Detaljert oversikt over din treningsprogress
         </p>
       </div>
+
+      {/* Plan Adherence Dashboard */}
+      <PlanAdherenceDashboard />
 
       {/* Timeframe Toggle */}
       <div className="flex gap-2">

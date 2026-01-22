@@ -3,6 +3,8 @@
  * Uses OpenAI GPT-4o mini via Netlify function
  */
 
+import { generateAdherenceSummary } from '../utils/planAdherence'
+
 /**
  * Send a message to the AI training coach
  * @param {Array} messages - Array of message objects with role and content
@@ -159,22 +161,12 @@ export function buildUserContext({ workouts = [], currentPlan = null, plans = []
       }))
     }))
 
-    // Calculate adherence statistics
-    const totalPlannedSessions = plans.reduce((sum, plan) => {
-      return sum + (plan.sessions?.length || 0)
-    }, 0)
+    // Generate comprehensive adherence analysis
+    const adherenceAnalysis = generateAdherenceSummary(plans, workouts)
+    context.planoppfølging = adherenceAnalysis
 
-    const completedSessions = plans.reduce((sum, plan) => {
-      return sum + (plan.sessions?.filter(s => s.status === 'completed').length || 0)
-    }, 0)
-
-    context.planAdherence = {
-      totalPlanned: totalPlannedSessions,
-      totalCompleted: completedSessions,
-      adherenceRate: totalPlannedSessions > 0
-        ? Math.round((completedSessions / totalPlannedSessions) * 100)
-        : 0
-    }
+    // Also add simplified version for backward compatibility
+    context.planAdherence = adherenceAnalysis.overall
   }
 
   // Add stats
