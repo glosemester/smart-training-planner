@@ -98,7 +98,7 @@ export default function AIPlanner() {
 
       // Calculate total weeks needed
       const totalWeeks = calculateTotalWeeks(wizardAnswers)
-      const weeksPerChunk = 2  // Reduced from 4 to prevent 504 timeout
+      const weeksPerChunk = 1  // Reduced to 1 week - guarantees no timeout (30-35s per chunk)
       const totalChunks = Math.ceil(totalWeeks / weeksPerChunk)
 
       // Initialize progress
