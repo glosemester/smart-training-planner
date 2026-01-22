@@ -85,11 +85,11 @@ function buildExerciseHistory(workouts) {
 }
 
 /**
- * Build user context from workout data and current plan
+ * Build user context from workout data and plans
  * @param {Object} params - Context parameters
  * @returns {Object} Formatted user context
  */
-export function buildUserContext({ workouts = [], currentPlan = null, stats = null, goals = null }) {
+export function buildUserContext({ workouts = [], currentPlan = null, plans = [], stats = null, goals = null }) {
   const context = {}
 
   // Add all workouts (for exercise history queries)
@@ -124,6 +124,7 @@ export function buildUserContext({ workouts = [], currentPlan = null, stats = nu
       id: currentPlan.id,
       focus: currentPlan.focus,
       weekNumber: currentPlan.weekNumber,
+      weekStart: currentPlan.weekStart,
       totalLoad: currentPlan.totalLoad,
       sessions: currentPlan.sessions?.map(s => ({
         id: s.id,
@@ -132,8 +133,47 @@ export function buildUserContext({ workouts = [], currentPlan = null, stats = nu
         title: s.title,
         description: s.description,
         duration_minutes: s.duration_minutes,
+        details: s.details,
+        status: s.status
+      }))
+    }
+  }
+
+  // Add all plans for comprehensive view
+  if (plans && plans.length > 0) {
+    context.allPlans = plans.map(p => ({
+      id: p.id,
+      focus: p.focus,
+      weekNumber: p.weekNumber,
+      weekStart: p.weekStart,
+      phase: p.phase,
+      totalLoad: p.totalLoad,
+      sessions: p.sessions?.map(s => ({
+        id: s.id,
+        day: s.day,
+        type: s.type,
+        title: s.title,
+        status: s.status, // 'planned' or 'completed'
+        duration_minutes: s.duration_minutes,
         details: s.details
       }))
+    }))
+
+    // Calculate adherence statistics
+    const totalPlannedSessions = plans.reduce((sum, plan) => {
+      return sum + (plan.sessions?.length || 0)
+    }, 0)
+
+    const completedSessions = plans.reduce((sum, plan) => {
+      return sum + (plan.sessions?.filter(s => s.status === 'completed').length || 0)
+    }, 0)
+
+    context.planAdherence = {
+      totalPlanned: totalPlannedSessions,
+      totalCompleted: completedSessions,
+      adherenceRate: totalPlannedSessions > 0
+        ? Math.round((completedSessions / totalPlannedSessions) * 100)
+        : 0
     }
   }
 

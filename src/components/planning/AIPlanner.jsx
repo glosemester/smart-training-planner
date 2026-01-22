@@ -32,7 +32,7 @@ import { CSS } from '@dnd-kit/utilities'
 
 export default function AIPlanner() {
   const { userProfile } = useAuth()
-  const { workouts, currentPlan, savePlan, updatePlanSession, addPlanSession, deletePlanSession } = useWorkouts()
+  const { workouts, currentPlan, savePlan, updatePlanSession, addPlanSession, deletePlanSession, addWorkout } = useWorkouts()
   const [showWizard, setShowWizard] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [generatingStep, setGeneratingStep] = useState('')
@@ -42,6 +42,7 @@ export default function AIPlanner() {
   const [editingSession, setEditingSession] = useState(null)
   const [addingSessionDay, setAddingSessionDay] = useState(null)
   const [viewingSession, setViewingSession] = useState(null)
+  const [completingSession, setCompletingSession] = useState(null)
 
   // Drag and drop sensors
   const sensors = useSensors(
@@ -231,6 +232,56 @@ export default function AIPlanner() {
     }
   }
 
+  // Håndter mark session as completed
+  const handleMarkCompleted = async (session, workoutData = {}) => {
+    if (!currentPlan) return
+
+    try {
+      // Calculate the date for this session based on plan weekStart and day
+      const weekStart = new Date(currentPlan.weekStart)
+      const dayIndex = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].indexOf(session.day)
+      const sessionDate = new Date(weekStart)
+      sessionDate.setDate(weekStart.getDate() + dayIndex)
+
+      // Create workout from session
+      const workout = {
+        type: session.type,
+        date: sessionDate.toISOString(),
+        duration: workoutData.duration || session.duration_minutes,
+        rpe: workoutData.rpe || null,
+        notes: workoutData.notes || session.description,
+        // Add session-specific data
+        ...(session.type === 'running' || session.type === 'easy_run' || session.type === 'tempo' || session.type === 'interval' || session.type === 'long_run' ? {
+          running: {
+            distance: workoutData.distance || session.details?.distance_km || 0,
+            avgPace: workoutData.avgPace || session.details?.target_pace || null,
+            surface: workoutData.surface || null
+          }
+        } : {}),
+        ...(workoutData.strength ? { strength: workoutData.strength } : {}),
+        fromPlan: true,
+        planSessionId: session.id
+      }
+
+      // Add workout to logged workouts
+      await addWorkout(workout)
+
+      // Mark session as completed in plan
+      await updatePlanSession(currentPlan.id, session.id, {
+        status: 'completed',
+        completedAt: new Date(),
+        completedWorkoutData: workoutData
+      })
+
+      setCompletingSession(null)
+      toast.success('✅ Økt markert som gjennomført!')
+    } catch (err) {
+      console.error('Failed to mark session as completed:', err)
+      setError('Kunne ikke markere økten som gjennomført')
+      toast.error('Kunne ikke markere økten som gjennomført')
+    }
+  }
+
   const displayPlan = generatedPlan || currentPlan
 
   // Grupper økter per dag
@@ -374,6 +425,7 @@ export default function AIPlanner() {
                   onEdit={setEditingSession}
                   onDelete={handleDeleteSession}
                   onView={setViewingSession}
+                  onMarkCompleted={setCompletingSession}
                   onAddSession={() => setAddingSessionDay(day)}
                   isEditable={!!currentPlan}
                 />
@@ -443,12 +495,21 @@ export default function AIPlanner() {
           onCancel={() => setAddingSessionDay(null)}
         />
       )}
+
+      {/* Complete Session Modal */}
+      {completingSession && (
+        <CompleteSessionModal
+          session={completingSession}
+          onSave={handleMarkCompleted}
+          onCancel={() => setCompletingSession(null)}
+        />
+      )}
     </div>
   )
 }
 
 // DayColumn component for grouping sessions by day
-function DayColumn({ day, sessions, onEdit, onDelete, onView, onAddSession, isEditable }) {
+function DayColumn({ day, sessions, onEdit, onDelete, onView, onMarkCompleted, onAddSession, isEditable }) {
   const dayNames = {
     monday: 'Mandag',
     tuesday: 'Tirsdag',
@@ -492,6 +553,7 @@ function DayColumn({ day, sessions, onEdit, onDelete, onView, onAddSession, isEd
               onEdit={onEdit}
               onDelete={onDelete}
               onView={onView}
+              onMarkCompleted={onMarkCompleted}
               isEditable={isEditable}
             />
           ))
@@ -502,7 +564,7 @@ function DayColumn({ day, sessions, onEdit, onDelete, onView, onAddSession, isEd
 }
 
 // Draggable Session Card
-function DraggableSessionCard({ session, onEdit, onDelete, onView, isEditable }) {
+function DraggableSessionCard({ session, onEdit, onDelete, onView, onMarkCompleted, isEditable }) {
   const {
     attributes,
     listeners,
@@ -518,13 +580,14 @@ function DraggableSessionCard({ session, onEdit, onDelete, onView, isEditable })
   } : undefined
 
   const type = getWorkoutType(session.type)
+  const isCompleted = session.status === 'completed'
 
   return (
     <article
       ref={setNodeRef}
       style={style}
       className={`bg-background-secondary border border-white/10 rounded-xl p-3 ${
-        session.completed ? 'opacity-60' : ''
+        isCompleted ? 'opacity-60 bg-success/5 border-success/20' : ''
       } transition-colors`}
       aria-label={`Treningsøkt: ${session.title}`}
     >
@@ -573,7 +636,7 @@ function DraggableSessionCard({ session, onEdit, onDelete, onView, isEditable })
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-1">
+        <div className="flex flex-col sm:flex-row items-center gap-1">
           {/* View details button */}
           <button
             onClick={() => onView && onView(session)}
@@ -584,7 +647,25 @@ function DraggableSessionCard({ session, onEdit, onDelete, onView, isEditable })
             <Info size={14} />
           </button>
 
-          {isEditable && (
+          {/* Mark as completed button */}
+          {!isCompleted && (
+            <button
+              onClick={() => onMarkCompleted && onMarkCompleted(session)}
+              className="p-1.5 text-text-muted hover:text-success hover:bg-success/10 rounded-lg transition-colors"
+              aria-label="Marker som gjennomført"
+              title="Marker som gjennomført"
+            >
+              <Check size={14} />
+            </button>
+          )}
+
+          {isCompleted && (
+            <div className="p-1.5 text-success" title="Gjennomført">
+              <Check size={14} />
+            </div>
+          )}
+
+          {isEditable && !isCompleted && (
             <>
               <button
                 onClick={() => onEdit(session)}
@@ -948,6 +1029,169 @@ function SessionDetailModal({ session, onClose }) {
             Lukk
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// Complete Session Modal
+function CompleteSessionModal({ session, onSave, onCancel }) {
+  const type = getWorkoutType(session.type)
+  const [formData, setFormData] = useState({
+    duration: session.duration_minutes || 60,
+    rpe: 5,
+    distance: session.details?.distance_km || 0,
+    avgPace: '',
+    surface: 'asphalt',
+    notes: ''
+  })
+
+  const isRunning = ['easy_run', 'tempo', 'interval', 'long_run', 'running'].includes(session.type)
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    onSave(session, formData)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4 overflow-y-auto">
+      <div className="bg-white dark:bg-background-card rounded-2xl max-w-md w-full my-8 shadow-xl">
+        {/* Header */}
+        <div className="bg-gradient-to-br from-success/20 to-success/5 border-b border-success/20 p-6">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-12 h-12 rounded-xl flex items-center justify-center text-xl"
+              style={{ backgroundColor: `${type.color}20` }}
+            >
+              {type.icon}
+            </div>
+            <div>
+              <h2 className="font-heading font-bold text-lg text-gray-900 dark:text-text-primary">
+                Marker som gjennomført
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-text-muted">{session.title}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Duration */}
+          <div>
+            <label htmlFor="complete-duration" className="input-label">
+              Varighet (minutter) *
+            </label>
+            <input
+              id="complete-duration"
+              type="number"
+              value={formData.duration}
+              onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value) || 0 })}
+              className="input"
+              min="1"
+              required
+            />
+          </div>
+
+          {/* RPE */}
+          <div>
+            <label htmlFor="complete-rpe" className="input-label">
+              RPE (Rate of Perceived Exertion) *
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                id="complete-rpe"
+                type="range"
+                min="1"
+                max="10"
+                value={formData.rpe}
+                onChange={(e) => setFormData({ ...formData, rpe: parseInt(e.target.value) })}
+                className="flex-1"
+              />
+              <span className="text-lg font-bold text-primary w-8 text-center">{formData.rpe}</span>
+            </div>
+            <div className="flex justify-between text-xs text-text-muted mt-1">
+              <span>Veldig lett</span>
+              <span>Maksimal</span>
+            </div>
+          </div>
+
+          {/* Running-specific fields */}
+          {isRunning && (
+            <>
+              <div>
+                <label htmlFor="complete-distance" className="input-label">
+                  Distanse (km)
+                </label>
+                <input
+                  id="complete-distance"
+                  type="number"
+                  step="0.1"
+                  value={formData.distance}
+                  onChange={(e) => setFormData({ ...formData, distance: parseFloat(e.target.value) || 0 })}
+                  className="input"
+                  min="0"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="complete-pace" className="input-label">
+                  Gjennomsnittlig fart (min/km)
+                </label>
+                <input
+                  id="complete-pace"
+                  type="text"
+                  placeholder="5:30"
+                  value={formData.avgPace}
+                  onChange={(e) => setFormData({ ...formData, avgPace: e.target.value })}
+                  className="input"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="complete-surface" className="input-label">
+                  Underlag
+                </label>
+                <select
+                  id="complete-surface"
+                  value={formData.surface}
+                  onChange={(e) => setFormData({ ...formData, surface: e.target.value })}
+                  className="input"
+                >
+                  <option value="asphalt">Asfalt</option>
+                  <option value="trail">Sti/terreng</option>
+                  <option value="track">Bane</option>
+                  <option value="treadmill">Tredemølle</option>
+                </select>
+              </div>
+            </>
+          )}
+
+          {/* Notes */}
+          <div>
+            <label htmlFor="complete-notes" className="input-label">
+              Notater
+            </label>
+            <textarea
+              id="complete-notes"
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              className="input resize-none"
+              rows={3}
+              placeholder="Hvordan følte økten seg? Eventuelle notater..."
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onCancel} className="btn-outline flex-1">
+              Avbryt
+            </button>
+            <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-2">
+              <Check size={18} />
+              Marker som gjennomført
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )

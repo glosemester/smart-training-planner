@@ -5,7 +5,7 @@ import { MessageCircle, Send, Sparkles, User, Bot, Loader, CheckCircle, XCircle 
 import ActionConfirmation from './ActionConfirmation'
 
 export default function AIChat() {
-  const { workouts, currentPlan, getStats, updatePlanSession, addPlanSession, deletePlanSession, updatePlan } = useWorkouts()
+  const { workouts, currentPlan, plans, getStats, updatePlanSession, addPlanSession, deletePlanSession, updatePlan } = useWorkouts()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -39,6 +39,7 @@ export default function AIChat() {
       const userContext = buildUserContext({
         workouts,
         currentPlan,
+        plans,
         stats
       })
 
