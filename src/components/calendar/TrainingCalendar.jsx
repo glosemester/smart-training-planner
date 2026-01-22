@@ -887,7 +887,7 @@ function DayCell({ date, sessions, isCurrentMonth, isToday, onClick, onDragStart
       className={`
         relative aspect-square rounded-lg p-1 transition-all duration-300
         ${isCurrentMonth ? 'bg-background-tertiary' : 'bg-background-secondary/50'}
-        ${isToday ? 'ring-2 ring-primary animate-pulse-ring' : 'border border-white/5'}
+        ${isToday ? 'ring-2 ring-primary animate-pulse-ring' : completed > 0 && planned === 0 ? 'border-2 border-success/40' : planned > 0 ? 'border-2 border-error/40' : 'border border-white/5'}
         ${total > 0 ? 'hover:scale-110 cursor-pointer active:scale-95 hover:shadow-lg' : ''}
         ${isDragging && isCurrentMonth ? 'ring-2 ring-secondary/50 scale-110 bg-secondary/5 animate-pulse-ring' : ''}
       `}
@@ -902,11 +902,11 @@ function DayCell({ date, sessions, isCurrentMonth, isToday, onClick, onDragStart
         {dayNumber}
       </div>
 
-      {/* Session indicators */}
+      {/* Session indicators - More visible markers */}
       {total > 0 && (
-        <div className="flex flex-col gap-0.5 items-center">
-          {/* Show first 3 sessions as colored dots */}
-          {sessions.slice(0, 3).map((session, idx) => {
+        <div className="space-y-0.5 flex flex-col items-center">
+          {/* Show first 2 sessions as larger colored dots */}
+          {sessions.slice(0, 2).map((session, idx) => {
             const workoutType = getWorkoutType(session.type)
             const isCompleted = session.status === 'completed'
             const isDraggable = session.source === 'plan' && !isCompleted
@@ -918,28 +918,39 @@ function DayCell({ date, sessions, isCurrentMonth, isToday, onClick, onDragStart
                 onDragStart={(e) => handleSessionDragStart(session, e)}
                 onDragEnd={onDragEnd}
                 className={`
-                  w-1 h-1 rounded-full transition-all
-                  ${isCompleted ? 'bg-success' : workoutType.color}
-                  ${isDraggable ? 'cursor-move hover:scale-150' : ''}
+                  w-1.5 h-1.5 rounded-full transition-all shadow-sm
+                  ${isCompleted ? 'bg-success shadow-success/50' : 'bg-error shadow-error/50'}
+                  ${isDraggable ? 'cursor-move hover:scale-150 hover:shadow-md' : ''}
                 `}
-                title={session.title || workoutType.name}
+                title={`${session.title || workoutType.name} - ${isCompleted ? 'Fullført' : 'Planlagt'}`}
               />
             )
           })}
 
-          {/* Show count if more than 3 */}
-          {total > 3 && (
-            <div className="text-[8px] text-text-muted font-medium mt-0.5">
-              +{total - 3}
+          {/* Show count if more than 2 */}
+          {total > 2 && (
+            <div className="text-[9px] text-white font-bold bg-primary/80 px-1 rounded-full">
+              +{total - 2}
             </div>
           )}
         </div>
       )}
 
-      {/* Status badge for completed days */}
-      {completed > 0 && (
+      {/* Status badge on day cell - corner markers */}
+      {completed > 0 && planned === 0 && (
         <div className="absolute top-0.5 right-0.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-success" />
+          <div className="w-2 h-2 rounded-full bg-success shadow-md shadow-success/50" />
+        </div>
+      )}
+      {planned > 0 && completed === 0 && (
+        <div className="absolute top-0.5 right-0.5">
+          <div className="w-2 h-2 rounded-full bg-error shadow-md shadow-error/50" />
+        </div>
+      )}
+      {completed > 0 && planned > 0 && (
+        <div className="absolute top-0.5 right-0.5 flex gap-0.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-success shadow-sm shadow-success/50" />
+          <div className="w-1.5 h-1.5 rounded-full bg-error shadow-sm shadow-error/50" />
         </div>
       )}
     </div>

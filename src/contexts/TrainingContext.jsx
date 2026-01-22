@@ -155,21 +155,43 @@ export function TrainingProvider({ children }) {
     if (!user) throw new Error('Ikke innlogget')
 
     try {
-      const docRef = await addDoc(
-        collection(db, 'users', user.uid, 'plans'),
-        {
+      const weekStartDate = new Date(planData.weekStart)
+      weekStartDate.setHours(0, 0, 0, 0)
+
+      // Sjekk om det finnes en eksisterende plan for samme uke
+      const existingPlan = plans.find(plan => {
+        const planWeekStart = plan.weekStart?.toDate?.() || new Date(plan.weekStart)
+        planWeekStart.setHours(0, 0, 0, 0)
+        return planWeekStart.getTime() === weekStartDate.getTime()
+      })
+
+      if (existingPlan) {
+        // Oppdater eksisterende plan
+        const planRef = doc(db, 'users', user.uid, 'plans', existingPlan.id)
+        await updateDoc(planRef, {
           ...planData,
-          weekStart: Timestamp.fromDate(new Date(planData.weekStart)),
-          generatedAt: Timestamp.now(),
+          weekStart: Timestamp.fromDate(weekStartDate),
           lastModified: Timestamp.now()
-        }
-      )
-      return docRef.id
+        })
+        return existingPlan.id
+      } else {
+        // Opprett ny plan
+        const docRef = await addDoc(
+          collection(db, 'users', user.uid, 'plans'),
+          {
+            ...planData,
+            weekStart: Timestamp.fromDate(weekStartDate),
+            generatedAt: Timestamp.now(),
+            lastModified: Timestamp.now()
+          }
+        )
+        return docRef.id
+      }
     } catch (err) {
       setError(err.message)
       throw err
     }
-  }, [user])
+  }, [user, plans])
 
   // Oppdater treningsplan
   const updatePlan = useCallback(async (planId, updates) => {
