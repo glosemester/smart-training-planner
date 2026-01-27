@@ -1,0 +1,22 @@
+// Firebase Storage Security Rules
+// Kopier dette inn i Firebase Console → Storage → Rules
+
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Kun autentiserte brukere kan lese/skrive egne filer
+    match /users/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Validering for bildeopplasting
+    match /users/{userId}/workouts/{workoutId}/{fileName} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.size < 5 * 1024 * 1024  // Maks 5MB
+                   && request.resource.contentType.matches('image/.*');  // Kun bilder
+    }
+  }
+}

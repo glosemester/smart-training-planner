@@ -1,0 +1,11 @@
+﻿
+[1m[37m===[39m Deploying to 'smart-training-planner'...[22m
+
+[36m[1mi [22m[39m deploying [1mfunctions[22m
+[36m[1mi  functions:[22m[39m preparing codebase [1mdefault[22m for deployment
+[36m[1mi  functions:[22m[39m ensuring required API [1mcloudfunctions.googleapis.com[22m is enabled...
+[36m[1mi  functions:[22m[39m ensuring required API [1mcloudbuild.googleapis.com[22m is enabled...
+[36m[1mi  artifactregistry:[22m[39m ensuring required API [1martifactregistry.googleapis.com[22m is enabled...
+
+[1m[31mError:[39m[22m Request to https://serviceusage.googleapis.com/v1/projects/smart-training-planner/services/cloudfunctions.googleapis.com had HTTP Error: 403, Project '720971272934' not found or permission denied.
+Help Token: AcxmRmLuh5a64WKXpbmHHejWFyrhRUZ2YaOag37PKD3_6Jmj3IDg64P_2x-OqSnztjJJ28j4kYOa1bGZnRCkjwRm0jJTBWEuYW4AeFvY2FTPnsBh

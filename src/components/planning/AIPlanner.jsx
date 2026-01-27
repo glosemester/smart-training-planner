@@ -1,27 +1,94 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useWorkouts } from '../../hooks/useWorkouts'
-import { generateTrainingPlan } from '../../services/aiService'
+import { generateTrainingPlan, generateTrainingPlanChunk } from '../../services/aiService'
 import { getWorkoutType } from '../../data/workoutTypes'
-import { Brain, Sparkles, RefreshCw, Check, Clock, MapPin } from 'lucide-react'
+import { Brain, Sparkles, RefreshCw, Check, Clock, MapPin, Edit2, Trash2, Plus, GripVertical, Image as ImageIcon, FileDown, X, Info, ChevronLeft } from 'lucide-react'
+import PlanningWizard from './PlanningWizard'
+import PlanAnalysis from './PlanAnalysis'
+import ImageUpload from '../common/ImageUpload'
+import { scanWorkout } from '../../services/workoutScanService'
+import { exportPlanToPDF } from '../../utils/planExport'
+import { toast } from 'react-hot-toast'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  useDroppable,
+  useDraggable
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 export default function AIPlanner() {
   const { userProfile } = useAuth()
-  const { workouts, currentPlan, savePlan } = useWorkouts()
+  const { workouts, currentPlan, savePlan, saveMultipleWeeks, updatePlanSession, addPlanSession, deletePlanSession, addWorkout } = useWorkouts()
+  const [showWizard, setShowWizard] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [generatingStep, setGeneratingStep] = useState('')
   const [error, setError] = useState(null)
   const [generatedPlan, setGeneratedPlan] = useState(null)
+  const [justSaved, setJustSaved] = useState(false)
+  const [editingSession, setEditingSession] = useState(null)
+  const [addingSessionDay, setAddingSessionDay] = useState(null)
+  const [viewingSession, setViewingSession] = useState(null)
+  const [completingSession, setCompletingSession] = useState(null)
+  const [chunkProgress, setChunkProgress] = useState({
+    currentChunk: 0,
+    totalChunks: 0,
+    completedWeeks: 0,
+    totalWeeks: 0
+  })
+  const [planContext, setPlanContext] = useState(null)
 
-  const handleGenerate = async () => {
+  // Smart oppdatering: Overvåk currentPlan og fjern midlertidig generatedPlan når sync er ok
+  useEffect(() => {
+    if (currentPlan && generatedPlan) {
+      console.log('Sync detected: currentPlan updated, clearing temporary generatedPlan')
+      setGeneratedPlan(null)
+    }
+  }, [currentPlan, generatedPlan])
+
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates
+    })
+  )
+
+  const handleWizardComplete = async (wizardAnswers) => {
+    setShowWizard(false)
     setGenerating(true)
     setError(null)
 
     try {
-      // Forbered data for AI
+      // Forbered data for AI med wizard-svar
       const userData = {
-        goals: userProfile?.goals || {},
-        availableDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
-        maxSessionDuration: 90,
+        // Wizard-preferanser
+        planType: wizardAnswers.planType || 'full_plan',
+        goal: wizardAnswers.goal === 'race' ? {
+          type: 'race',
+          ...wizardAnswers.raceDetails
+        } : {
+          type: wizardAnswers.goal
+        },
+        availableDays: wizardAnswers.preferredDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
+        daysPerWeek: wizardAnswers.availability || 4,
+        maxSessionDuration: wizardAnswers.sessionDuration || 60,
+        preferences: wizardAnswers.preferences || '',
+
+        // Eksisterende data
         recentWorkouts: workouts.slice(0, 20).map(w => ({
           date: w.date,
           type: w.type,
@@ -34,142 +101,548 @@ export default function AIPlanner() {
           restingHR: null,
           hrv: null,
           generalFeeling: 'ok'
-        },
-        notes: ''
+        }
       }
 
-      const plan = await generateTrainingPlan(userData)
-      setGeneratedPlan(plan)
+      // Calculate total weeks needed
+      const totalWeeks = calculateTotalWeeks(wizardAnswers)
+      const weeksPerChunk = 1  // Kept at 1 week for safety, but Haiku should be much faster
+      const totalChunks = Math.ceil(totalWeeks / weeksPerChunk)
+
+      // Initialize progress
+      setChunkProgress({
+        currentChunk: 0,
+        totalChunks,
+        completedWeeks: 0,
+        totalWeeks
+      })
+
+      let contextForNextChunk = null
+      let lastWeekSummary = null
+      const startMonday = getNextMonday()
+      const allWeeksBuffer = [] // 1. Local buffer for ALL weeks
+
+      // Generate chunks sequentially
+      for (let chunkNum = 1; chunkNum <= totalChunks; chunkNum++) {
+        const startWeek = (chunkNum - 1) * weeksPerChunk + 1
+        const weeksInThisChunk = Math.min(weeksPerChunk, totalWeeks - (chunkNum - 1) * weeksPerChunk)
+
+        // Update progress
+        setChunkProgress(prev => ({ ...prev, currentChunk: chunkNum }))
+        setGeneratingStep(
+          `Genererer uker ${startWeek}-${startWeek + weeksInThisChunk - 1}... ` +
+          `(chunk ${chunkNum}/${totalChunks})`
+        )
+
+        // Prepare chunk info
+        const chunkInfo = {
+          chunkNumber: chunkNum,
+          totalChunks: totalChunks,
+          weeksPerChunk: weeksPerChunk,
+          startWeek: startWeek,
+          totalWeeks: totalWeeks,
+          isFirstChunk: chunkNum === 1,
+          previousWeekSummary: chunkNum === 1 ? null : lastWeekSummary,
+          overallStrategy: chunkNum === 1 ? null : contextForNextChunk.overallStrategy,
+          phaseGuidelines: chunkNum === 1 ? null : contextForNextChunk.phaseGuidelines
+        }
+
+        // Generate this chunk with retry logic
+        let chunkData = null
+        let retries = 0
+        const MAX_RETRIES = 3
+
+        while (!chunkData && retries < MAX_RETRIES) {
+          try {
+            if (retries > 0) {
+              setGeneratingStep(
+                `Genererer uker ${startWeek}-${startWeek + weeksInThisChunk - 1}... ` +
+                `(Prøve ${retries + 1}/${MAX_RETRIES})`
+              )
+              await new Promise(resolve => setTimeout(resolve, 2000))
+            }
+
+            chunkData = await generateTrainingPlanChunk({
+              userData,
+              chunkInfo
+            })
+          } catch (err) {
+            console.warn(`Chunk generation failed (attempt ${retries + 1}):`, err)
+            retries++
+            if (retries >= MAX_RETRIES) throw new Error(`Feilet etter ${MAX_RETRIES} forsøk: ${err.message}`)
+          }
+        }
+
+        // Store context from first chunk
+        if (chunkNum === 1) {
+          contextForNextChunk = {
+            overallStrategy: chunkData.overallStrategy,
+            milestones: chunkData.milestones,
+            phaseGuidelines: chunkData.phaseGuidelines
+          }
+          setPlanContext(contextForNextChunk)
+        }
+
+        // Validate chunk data
+        if (!chunkData || !chunkData.weeks || !Array.isArray(chunkData.weeks)) {
+          throw new Error('AI returnerte ikke uker i riktig format')
+        }
+
+        // Process weeks in this chunk
+        for (let i = 0; i < chunkData.weeks.length; i++) {
+          const week = chunkData.weeks[i]
+          const weekNumber = startWeek + i
+
+          // Calculate monday for this week
+          const weekMonday = new Date(startMonday)
+          weekMonday.setDate(startMonday.getDate() + ((weekNumber - 1) * 7))
+
+          const weekPlan = {
+            weekNumber: weekNumber,
+            phase: week.phase,
+            focus: week.focus,
+            totalLoad: week.totalLoad,
+            sessions: week.sessions,
+            weeklyTips: week.weeklyTips,
+            weekStart: weekMonday.toISOString(),
+            generatedBy: 'ai',
+            wizardAnswers: wizardAnswers,
+            planDuration: totalWeeks,
+            overallStrategy: contextForNextChunk.overallStrategy,
+            milestones: contextForNextChunk.milestones
+          }
+
+          allWeeksBuffer.push(weekPlan) // Add to buffer
+
+          // Store summary for next chunk's context
+          if (i === chunkData.weeks.length - 1) {
+            lastWeekSummary = {
+              weekNumber: weekNumber,
+              phase: week.phase,
+              totalLoad: week.totalLoad,
+              keyWorkouts: week.sessions
+                .filter(s => ['long_run', 'tempo', 'interval'].includes(s.type))
+                .map(s => s.title)
+                .slice(0, 3)
+            }
+          }
+        }
+
+        // Update temporary progress UI without saving
+        setChunkProgress(prev => ({
+          ...prev,
+          completedWeeks: allWeeksBuffer.length
+        }))
+      }
+
+      // 2. Batch Save ALL weeks sequentially (or parallel if supported)
+      setGeneratingStep(`Lagrer ${allWeeksBuffer.length} uker til databasen...`)
+      console.log('Batch saving all weeks:', allWeeksBuffer)
+
+      // Use saveMultipleWeeks which handles the batch saving
+      await saveMultipleWeeks(allWeeksBuffer)
+
+      // 3. Success & Optimization
+      setGeneratingStep('Ferdig!')
+      setJustSaved(true)
+      toast.success(`🎯 ${totalWeeks} ukers plan lagret!`)
+
+      // Wait a moment for context to potentially update, but we trust optimistic update from savePlan
+      console.log('Generering og lagring fullført.')
+
+      // NB: Vi fjerner IKKE setGeneratedPlan(null) her.
+      // Vi beholder den visningen inntil brukeren selv navigerer eller context oppdateres.
+
     } catch (err) {
-      setError(err.message)
+      console.error('Plan generation error:', err)
+      setError(err.message || 'Kunne ikke generere treningsplan')
+      toast.error('Noe gikk galt ved generering av plan')
     } finally {
       setGenerating(false)
+      setGeneratingStep('')
     }
   }
 
-  const handleSavePlan = async () => {
-    if (!generatedPlan) return
+  // Calculate total weeks based on wizard answers
+  function calculateTotalWeeks(wizardAnswers) {
+    if (wizardAnswers.goal === 'race' && wizardAnswers.raceDetails?.date) {
+      const raceDate = new Date(wizardAnswers.raceDetails.date)
+      const today = new Date()
+      const weeksUntilRace = Math.ceil((raceDate - today) / (7 * 24 * 60 * 60 * 1000))
+      return Math.min(weeksUntilRace, 24)  // Max 24 weeks
+    }
+    return 12  // Default 12 weeks for non-race goals
+  }
+
+  const handleRegeneratePlan = () => {
+    // Bekreft før regenerering hvis det finnes en eksisterende plan
+    if (currentPlan) {
+      if (confirm('Dette vil erstatte din nåværende plan. Er du sikker?')) {
+        setShowWizard(true)
+      }
+    } else {
+      setShowWizard(true)
+    }
+  }
+
+  // Håndter drag end
+  const handleDragEnd = async (event) => {
+    const { active, over } = event
+
+    if (!over || !currentPlan) return
+
+    // Extract session ID and day from the IDs
+    const activeId = active.id
+    const overDay = over.id
+
+    // Find the session that was dragged
+    const session = currentPlan.sessions.find(s => s.id === activeId)
+    if (!session) return
+
+    // If the session was dragged to a different day
+    if (session.day !== overDay) {
+      try {
+        await updatePlanSession(currentPlan.id, activeId, { day: overDay })
+      } catch (err) {
+        setError('Kunne ikke flytte økten')
+      }
+    }
+  }
+
+  // Håndter edit session
+  const handleEditSession = async (sessionId, updates) => {
+    if (!currentPlan) return
 
     try {
-      const monday = getNextMonday()
-      await savePlan({
-        ...generatedPlan,
-        weekStart: monday.toISOString(),
-        generatedBy: 'ai'
-      })
-      setGeneratedPlan(null)
+      await updatePlanSession(currentPlan.id, sessionId, updates)
+      setEditingSession(null)
     } catch (err) {
-      setError(err.message)
+      setError('Kunne ikke oppdatere økten')
+    }
+  }
+
+  // Håndter delete session
+  const handleDeleteSession = async (sessionId) => {
+    if (!currentPlan) return
+
+    if (confirm('Er du sikker på at du vil slette denne økten?')) {
+      try {
+        await deletePlanSession(currentPlan.id, sessionId)
+      } catch (err) {
+        setError('Kunne ikke slette økten')
+      }
+    }
+  }
+
+  // Håndter add session
+  const handleAddSession = async (day, sessionData) => {
+    if (!currentPlan) return
+
+    try {
+      await addPlanSession(currentPlan.id, { ...sessionData, day })
+      setAddingSessionDay(null)
+    } catch (err) {
+      setError('Kunne ikke legge til økten')
+    }
+  }
+
+  // Håndter mark session as completed
+  const handleMarkCompleted = async (session, workoutData = {}) => {
+    if (!currentPlan) return
+
+    try {
+      // Calculate the date for this session based on plan weekStart and day
+      const weekStart = new Date(currentPlan.weekStart)
+      const dayIndex = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].indexOf(session.day)
+      const sessionDate = new Date(weekStart)
+      sessionDate.setDate(weekStart.getDate() + dayIndex)
+
+      // Create workout from session
+      const workout = {
+        type: session.type,
+        date: sessionDate.toISOString(),
+        duration: workoutData.duration || session.duration_minutes,
+        rpe: workoutData.rpe || null,
+        notes: workoutData.notes || session.description,
+        // Add session-specific data
+        ...(session.type === 'running' || session.type === 'easy_run' || session.type === 'tempo' || session.type === 'interval' || session.type === 'long_run' ? {
+          running: {
+            distance: workoutData.distance || session.details?.distance_km || 0,
+            avgPace: workoutData.avgPace || session.details?.target_pace || null,
+            surface: workoutData.surface || null
+          }
+        } : {}),
+        ...(workoutData.strength ? { strength: workoutData.strength } : {}),
+        fromPlan: true,
+        planSessionId: session.id
+      }
+
+      // Add workout to logged workouts
+      await addWorkout(workout)
+
+      // Mark session as completed in plan
+      await updatePlanSession(currentPlan.id, session.id, {
+        status: 'completed',
+        completedAt: new Date(),
+        completedWorkoutData: workoutData
+      })
+
+      setCompletingSession(null)
+      toast.success('✅ Økt markert som gjennomført!')
+    } catch (err) {
+      console.error('Failed to mark session as completed:', err)
+      setError('Kunne ikke markere økten som gjennomført')
+      toast.error('Kunne ikke markere økten som gjennomført')
     }
   }
 
   const displayPlan = generatedPlan || currentPlan
 
+  // Grupper økter per dag
+  const sessionsByDay = displayPlan?.sessions?.reduce((acc, session) => {
+    const day = session.day || 'monday'
+    if (!acc[day]) acc[day] = []
+    acc[day].push(session)
+    return acc
+  }, {}) || {}
+
+  // Vis wizard hvis aktiv
+  if (showWizard) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <button
+            onClick={() => setShowWizard(false)}
+            className="text-sm text-gray-500 hover:text-gray-900 dark:hover:text-white mb-2 flex items-center gap-1"
+          >
+            <ChevronLeft size={16} /> Tilbake
+          </button>
+          <h1 className="font-heading text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <Brain className="text-primary" />
+            Ny treningsplan
+          </h1>
+        </div>
+
+        <PlanningWizard
+          onComplete={handleWizardComplete}
+          onCancel={() => setShowWizard(false)}
+        />
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-fade-in pb-20">
       {/* Header */}
-      <div>
-        <h1 className="font-heading text-2xl font-bold text-text-primary flex items-center gap-2">
-          <Brain className="text-secondary" />
-          AI Treningsplan
-        </h1>
-        <p className="text-text-secondary mt-1">
-          La AI generere en personlig treningsplan
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-heading text-3xl font-bold text-gray-900 dark:text-white">
+            Plan
+          </h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">
+            Din uke i korte trekk
+          </p>
+        </div>
       </div>
 
       {/* Generate button */}
-      <button
-        onClick={handleGenerate}
-        disabled={generating}
-        className="btn-primary w-full py-4"
-      >
-        {generating ? (
-          <>
-            <div className="spinner" />
-            Genererer plan...
-          </>
-        ) : (
-          <>
-            <Sparkles size={20} />
-            {currentPlan ? 'Generer ny plan' : 'Generer treningsplan'}
-          </>
-        )}
-      </button>
+      {generating ? (
+        <div
+          className="card border-dashed border-2 p-8"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex flex-col items-center gap-4 text-center">
+            <div className="spinner" aria-hidden="true" />
+            <p className="text-gray-900 dark:text-white font-medium">{generatingStep}</p>
+
+            {/* Progress bar */}
+            {chunkProgress.totalChunks > 0 && (
+              <div className="w-full max-w-sm">
+                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                  <span>Genererer del {chunkProgress.currentChunk} av {chunkProgress.totalChunks}</span>
+                </div>
+                <div className="h-1.5 bg-gray-100 dark:bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{
+                      width: `${(chunkProgress.completedWeeks / chunkProgress.totalWeeks) * 100}%`
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={handleRegeneratePlan}
+          className="btn-primary w-full py-4 shadow-lg shadow-primary/20"
+        >
+          <Sparkles size={20} className="mr-2" />
+          {currentPlan ? 'Generer ny plan med AI' : 'Opprett treningsplan'}
+        </button>
+      )}
 
       {/* Error */}
       {error && (
-        <div className="p-4 bg-error/10 border border-error/20 rounded-xl text-error text-sm">
+        <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-4 rounded-xl text-sm font-medium">
           {error}
         </div>
       )}
 
       {/* Plan display */}
       {displayPlan && (
-        <div className="space-y-4">
+        <div className="space-y-6">
+
           {/* Plan header */}
-          <div className="card bg-gradient-to-br from-secondary/20 to-secondary/5 border-secondary/20">
-            <div className="flex items-start justify-between">
+          <div className="card bg-gray-900 text-white border-none p-6 relative overflow-hidden">
+            <div className="relative z-10 flex items-start justify-between">
               <div>
-                <p className="text-xs text-secondary font-medium uppercase tracking-wide">
-                  {generatedPlan ? 'Ny generert plan' : `Uke ${displayPlan.weekNumber || ''}`}
+                <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">
+                  Uke {displayPlan.weekNumber || ''}
                 </p>
-                <h3 className="font-heading font-bold text-lg text-text-primary mt-1">
+                <h3 className="font-heading font-bold text-2xl mt-1">
                   {displayPlan.focus}
                 </h3>
                 {displayPlan.totalLoad && (
-                  <p className="text-sm text-text-muted mt-2">
-                    {displayPlan.totalLoad.running_km} km løping • {displayPlan.totalLoad.strength_sessions} styrkeøkter
-                  </p>
+                  <div className="flex items-center gap-4 mt-4 text-sm text-gray-300">
+                    <span className="flex items-center gap-1.5">
+                      <MapPin size={16} className="text-primary" />
+                      {displayPlan.totalLoad.running_km} km
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <Clock size={16} className="text-primary" />
+                      {displayPlan.totalLoad.strength_sessions} økter
+                    </span>
+                  </div>
                 )}
               </div>
-              {generatedPlan && (
-                <button onClick={handleSavePlan} className="btn-primary text-sm">
-                  <Check size={16} />
-                  Bruk
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  try {
+                    exportPlanToPDF(displayPlan, displayPlan.weekStart || new Date().toISOString())
+                    toast.success('📄 Plan eksportert til PDF!')
+                  } catch (error) {
+                    console.error('PDF export error:', error)
+                    toast.error('Kunne ikke eksportere PDF')
+                  }
+                }}
+                className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+                title="Eksporter PDF"
+              >
+                <FileDown size={20} />
+              </button>
             </div>
+
+            {/* Decoration */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-32 -mt-32" />
           </div>
 
-          {/* Sessions */}
-          <div className="space-y-2">
-            {displayPlan.sessions?.map((session, idx) => (
-              <SessionCard key={idx} session={session} />
-            ))}
-          </div>
+          {/* Sessions grouped by day */}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <div className="space-y-4">
+              {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => (
+                <DayColumn
+                  key={day}
+                  day={day}
+                  sessions={sessionsByDay[day] || []}
+                  onEdit={setEditingSession}
+                  onDelete={handleDeleteSession}
+                  onView={setViewingSession}
+                  onMarkCompleted={setCompletingSession}
+                  onAddSession={() => setAddingSessionDay(day)}
+                  isEditable={!!currentPlan}
+                />
+              ))}
+            </div>
+          </DndContext>
 
           {/* Tips */}
           {displayPlan.weeklyTips?.length > 0 && (
-            <div className="card">
-              <h3 className="font-medium text-text-primary mb-2">Tips for uken</h3>
-              <ul className="space-y-1">
+            <div className="card bg-purple-50 dark:bg-purple-500/10 border-purple-100 dark:border-purple-500/20">
+              <h3 className="font-bold text-purple-900 dark:text-purple-300 mb-3 flex items-center gap-2">
+                <Sparkles size={18} />
+                Ukes-tips
+              </h3>
+              <ul className="space-y-2">
                 {displayPlan.weeklyTips.map((tip, idx) => (
-                  <li key={idx} className="text-sm text-text-secondary flex items-start gap-2">
-                    <span className="text-success">•</span>
-                    {tip}
+                  <li key={idx} className="text-sm text-purple-800 dark:text-purple-200 flex items-start gap-2">
+                    <span className="mt-1.5 w-1 h-1 rounded-full bg-current opacity-60" />
+                    <span className="leading-relaxed">{tip}</span>
                   </li>
                 ))}
               </ul>
             </div>
           )}
+
+          {/* Plan Analysis - show only for saved plans (currentPlan) */}
+          {currentPlan && !generatedPlan && (
+            <div className="pt-4 border-t border-gray-200 dark:border-white/5">
+              <h3 className="font-heading text-lg font-bold text-gray-900 dark:text-white mb-4">
+                Analyse
+              </h3>
+              <PlanAnalysis plan={currentPlan} />
+            </div>
+          )}
         </div>
       )}
 
-      {/* Empty state */}
+      {/* Empty state & Manual Refresh */}
       {!displayPlan && !generating && (
-        <div className="card text-center py-12">
-          <Brain size={48} className="mx-auto text-text-muted mb-4" />
-          <p className="text-text-muted">
-            Trykk på knappen for å generere en AI-treningsplan basert på dine mål og historikk
+        <div className="text-center py-12 px-4">
+          <div className="w-16 h-16 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Brain size={32} className="text-gray-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Ingen plan aktiv</h3>
+          <p className="text-gray-500 dark:text-gray-400 max-w-sm mx-auto mt-2 mb-4">
+            Trykk på knappen over for å generere en skreddersydd treningsplan med AI.
           </p>
+
+          {/* Manuell refresh knapp fjernet - vi stoler på state-oppdateringer */}
         </div>
+      )}
+
+      {/* Session Detail Modal */}
+      {viewingSession && (
+        <SessionDetailModal
+          session={viewingSession}
+          onClose={() => setViewingSession(null)}
+        />
+      )}
+
+      {/* Edit Session Modal */}
+      {editingSession && (
+        <EditSessionModal
+          session={editingSession}
+          onSave={handleEditSession}
+          onCancel={() => setEditingSession(null)}
+        />
+      )}
+
+      {/* Add Session Modal */}
+      {addingSessionDay && (
+        <AddSessionModal
+          day={addingSessionDay}
+          onSave={handleAddSession}
+          onCancel={() => setAddingSessionDay(null)}
+        />
+      )}
+
+      {/* Complete Session Modal */}
+      {completingSession && (
+        <CompleteSessionModal
+          session={completingSession}
+          onSave={handleMarkCompleted}
+          onCancel={() => setCompletingSession(null)}
+        />
       )}
     </div>
   )
 }
 
-function SessionCard({ session }) {
+// DayColumn component for grouping sessions by day
+function DayColumn({ day, sessions, onEdit, onDelete, onView, onMarkCompleted, onAddSession, isEditable }) {
   const dayNames = {
     monday: 'Mandag',
     tuesday: 'Tirsdag',
@@ -180,26 +653,100 @@ function SessionCard({ session }) {
     sunday: 'Søndag'
   }
 
-  const type = getWorkoutType(session.type)
+  const { setNodeRef } = useDroppable({
+    id: day
+  })
 
   return (
-    <div className={`card ${session.completed ? 'opacity-60' : ''}`}>
+    <div className="card" ref={setNodeRef}>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-medium text-text-primary">{dayNames[day]}</h3>
+        {isEditable && (
+          <button
+            onClick={onAddSession}
+            className="px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors relative z-10"
+            aria-label={`Legg til økt på ${dayNames[day]}`}
+          >
+            <Plus size={16} />
+            Legg til
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-2 min-h-[80px]">
+        {sessions.length === 0 ? (
+          <p className="text-sm text-text-muted italic py-4 text-center">
+            Ingen økter planlagt
+          </p>
+        ) : (
+          sessions.map(session => (
+            <DraggableSessionCard
+              key={session.id || session.title}
+              session={session}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onView={onView}
+              onMarkCompleted={onMarkCompleted}
+              isEditable={isEditable}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Draggable Session Card
+function DraggableSessionCard({ session, onEdit, onDelete, onView, onMarkCompleted, isEditable }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform
+  } = useDraggable({
+    id: session.id || session.title,
+    disabled: !isEditable
+  })
+
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`
+  } : undefined
+
+  const type = getWorkoutType(session.type)
+  const isCompleted = session.status === 'completed'
+
+  return (
+    <article
+      ref={setNodeRef}
+      style={style}
+      className={`bg-background-secondary border border-white/10 rounded-xl p-3 ${isCompleted ? 'opacity-60 bg-success/5 border-success/20' : ''
+        } transition-colors`}
+      aria-label={`Treningsøkt: ${session.title}`}
+    >
       <div className="flex items-start gap-3">
-        <div 
+        {/* Drag handle */}
+        {isEditable && (
+          <button
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing text-text-muted hover:text-text-primary mt-1"
+            aria-label="Dra for å flytte økt"
+          >
+            <GripVertical size={16} />
+          </button>
+        )}
+
+        {/* Icon */}
+        <div
           className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
           style={{ backgroundColor: `${type.color}20` }}
+          aria-hidden="true"
         >
           {type.icon}
         </div>
+
+        {/* Content */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-text-muted uppercase tracking-wide">
-              {dayNames[session.day]}
-            </p>
-            {session.completed && (
-              <Check size={16} className="text-success" />
-            )}
-          </div>
           <h4 className="font-medium text-text-primary mt-0.5">
             {session.title}
           </h4>
@@ -219,6 +766,564 @@ function SessionCard({ session }) {
             )}
           </div>
         </div>
+
+        {/* Actions */}
+        <div className="flex flex-col sm:flex-row items-center gap-1">
+          {/* View details button */}
+          <button
+            onClick={() => onView && onView(session)}
+            className="p-1.5 text-text-muted hover:text-secondary hover:bg-secondary/10 rounded-lg transition-colors"
+            aria-label="Se detaljer"
+            title="Se detaljer"
+          >
+            <Info size={14} />
+          </button>
+
+          {/* Mark as completed button */}
+          {!isCompleted && (
+            <button
+              onClick={() => onMarkCompleted && onMarkCompleted(session)}
+              className="p-1.5 text-text-muted hover:text-success hover:bg-success/10 rounded-lg transition-colors"
+              aria-label="Marker som gjennomført"
+              title="Marker som gjennomført"
+            >
+              <Check size={14} />
+            </button>
+          )}
+
+          {isCompleted && (
+            <div className="p-1.5 text-success" title="Gjennomført">
+              <Check size={14} />
+            </div>
+          )}
+
+          {isEditable && !isCompleted && (
+            <>
+              <button
+                onClick={() => onEdit(session)}
+                className="p-1.5 text-text-muted hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                aria-label="Rediger økt"
+              >
+                <Edit2 size={14} />
+              </button>
+              <button
+                onClick={() => onDelete(session.id)}
+                className="p-1.5 text-text-muted hover:text-error hover:bg-error/10 rounded-lg transition-colors"
+                aria-label="Slett økt"
+              >
+                <Trash2 size={14} />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </article>
+  )
+}
+
+// Edit Session Modal
+function EditSessionModal({ session, onSave, onCancel }) {
+  const [formData, setFormData] = useState({
+    title: session.title || '',
+    description: session.description || '',
+    duration_minutes: session.duration_minutes || 60
+  })
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    onSave(session.id, formData)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+      <div className="bg-background-primary rounded-xl max-w-md w-full p-6 pb-36">
+        <h2 className="text-xl font-bold text-text-primary mb-4">Rediger økt</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="edit-title" className="input-label">Tittel</label>
+            <input
+              id="edit-title"
+              type="text"
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className="input"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="edit-description" className="input-label">Beskrivelse</label>
+            <textarea
+              id="edit-description"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="input resize-none"
+              rows={3}
+            />
+          </div>
+          <div>
+            <label htmlFor="edit-duration" className="input-label">Varighet (minutter)</label>
+            <input
+              id="edit-duration"
+              type="number"
+              value={formData.duration_minutes}
+              onChange={(e) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) })}
+              className="input"
+              min="1"
+              required
+            />
+          </div>
+          <div className="flex gap-3">
+            <button type="button" onClick={onCancel} className="btn-outline flex-1">
+              Avbryt
+            </button>
+            <button type="submit" className="btn-primary flex-1">
+              Lagre
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// Add Session Modal
+function AddSessionModal({ day, onSave, onCancel }) {
+  const [formData, setFormData] = useState({
+    type: 'hyrox',
+    title: '',
+    description: '',
+    duration_minutes: 60
+  })
+  const [images, setImages] = useState([])
+  const [scanning, setScanning] = useState(false)
+  const [scanError, setScanError] = useState(null)
+
+  const dayNames = {
+    monday: 'Mandag',
+    tuesday: 'Tirsdag',
+    wednesday: 'Onsdag',
+    thursday: 'Torsdag',
+    friday: 'Fredag',
+    saturday: 'Lørdag',
+    sunday: 'Søndag'
+  }
+
+  // Handle image upload and OCR
+  const handleImagesChange = async (newImages) => {
+    setImages(newImages)
+    setScanError(null)
+
+    // Only scan if there are new images and we haven't scanned yet
+    if (newImages.length > 0 && !scanning && !formData.title) {
+      setScanning(true)
+      try {
+        const result = await scanWorkout(newImages)
+
+        // Auto-fill form with OCR results
+        setFormData({
+          type: result.type || formData.type,
+          title: result.title || formData.title,
+          description: result.description || formData.description,
+          duration_minutes: result.duration_minutes || formData.duration_minutes
+        })
+      } catch (err) {
+        console.error('OCR scan error:', err)
+        setScanError('Kunne ikke lese bildet automatisk. Fyll inn feltene manuelt.')
+      } finally {
+        setScanning(false)
+      }
+    }
+  }
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    onSave(day, formData)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 overflow-y-auto">
+      <div className="bg-background-primary rounded-xl max-w-md w-full p-6 pb-36 my-4">
+        <h2 className="text-xl font-bold text-text-primary mb-4">
+          Legg til økt - {dayNames[day]}
+        </h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Image Upload */}
+          <div>
+            <label className="input-label flex items-center gap-2">
+              <ImageIcon size={16} />
+              Last opp skjermbilde fra whiteboard/trening (valgfritt)
+            </label>
+            <ImageUpload
+              images={images}
+              onImagesChange={handleImagesChange}
+              maxImages={3}
+            />
+            {scanning && (
+              <div className="mt-2 p-3 bg-secondary/10 border border-secondary/20 rounded-xl text-secondary text-sm flex items-center gap-2">
+                <div className="spinner-sm" />
+                Leser treningsøkt fra bilde...
+              </div>
+            )}
+            {scanError && (
+              <div className="mt-2 p-3 bg-warning/10 border border-warning/20 rounded-xl text-warning text-sm">
+                {scanError}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="add-type" className="input-label">Type</label>
+            <select
+              id="add-type"
+              value={formData.type}
+              onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+              className="input"
+            >
+              <option value="hyrox">Hyrox</option>
+              <option value="crossfit">CrossFit</option>
+              <option value="strength">Styrketrening</option>
+              <option value="rest">Hviledag</option>
+              <option value="other">Annet</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="add-title" className="input-label">Tittel</label>
+            <input
+              id="add-title"
+              type="text"
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className="input"
+              placeholder="F.eks. Hyrox-økt på senter"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="add-description" className="input-label">Beskrivelse</label>
+            <textarea
+              id="add-description"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="input resize-none"
+              rows={3}
+              placeholder="Beskriv økten..."
+            />
+          </div>
+          <div>
+            <label htmlFor="add-duration" className="input-label">Varighet (minutter)</label>
+            <input
+              id="add-duration"
+              type="number"
+              value={formData.duration_minutes}
+              onChange={(e) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) })}
+              className="input"
+              min="1"
+              required
+            />
+          </div>
+          <div className="flex gap-3">
+            <button type="button" onClick={onCancel} className="btn-outline flex-1">
+              Avbryt
+            </button>
+            <button type="submit" className="btn-primary flex-1" disabled={scanning}>
+              Legg til
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// Session Detail Modal
+function SessionDetailModal({ session, onClose }) {
+  const type = getWorkoutType(session.type)
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+      <div className="bg-white dark:bg-background-card rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl">
+        {/* Header */}
+        <div className="sticky top-0 bg-white dark:bg-background-card border-b border-gray-200 dark:border-white/10 p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-12 h-12 rounded-xl flex items-center justify-center text-xl"
+              style={{ backgroundColor: `${type.color}20` }}
+            >
+              {type.icon}
+            </div>
+            <div>
+              <h2 className="font-heading font-bold text-lg text-gray-900 dark:text-text-primary">
+                {session.title}
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-text-muted">{type.name}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors"
+            aria-label="Lukk"
+          >
+            <X size={20} className="text-gray-600 dark:text-text-muted" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-6">
+          {/* Quick info */}
+          <div className="flex gap-4">
+            <div className="flex items-center gap-2 text-gray-700 dark:text-text-secondary">
+              <Clock size={18} className="text-primary" />
+              <span className="font-medium">{session.duration_minutes} min</span>
+            </div>
+            {session.details?.distance_km && (
+              <div className="flex items-center gap-2 text-gray-700 dark:text-text-secondary">
+                <MapPin size={18} className="text-primary" />
+                <span className="font-medium">{session.details.distance_km} km</span>
+              </div>
+            )}
+          </div>
+
+          {/* Description */}
+          {session.description && (
+            <div>
+              <h3 className="font-heading font-semibold text-gray-900 dark:text-text-primary mb-2 flex items-center gap-2">
+                <Info size={18} className="text-primary" />
+                Beskrivelse
+              </h3>
+              <p className="text-gray-700 dark:text-text-secondary whitespace-pre-wrap leading-relaxed">
+                {session.description}
+              </p>
+            </div>
+          )}
+
+          {/* Details */}
+          {session.details && (
+            <div>
+              <h3 className="font-heading font-semibold text-gray-900 dark:text-text-primary mb-3">
+                Detaljer
+              </h3>
+              <div className="space-y-2">
+                {session.details.target_pace && (
+                  <div className="flex justify-between py-2 border-b border-gray-200 dark:border-white/10">
+                    <span className="text-gray-600 dark:text-text-muted">Mål tempo</span>
+                    <span className="font-medium text-gray-900 dark:text-text-primary">
+                      {session.details.target_pace}
+                    </span>
+                  </div>
+                )}
+                {session.details.intensity && (
+                  <div className="flex justify-between py-2 border-b border-gray-200 dark:border-white/10">
+                    <span className="text-gray-600 dark:text-text-muted">Intensitet</span>
+                    <span className="font-medium text-gray-900 dark:text-text-primary">
+                      {session.details.intensity}
+                    </span>
+                  </div>
+                )}
+                {session.details.warmup && (
+                  <div className="flex justify-between py-2 border-b border-gray-200 dark:border-white/10">
+                    <span className="text-gray-600 dark:text-text-muted">Oppvarming</span>
+                    <span className="font-medium text-gray-900 dark:text-text-primary">
+                      {session.details.warmup}
+                    </span>
+                  </div>
+                )}
+                {session.details.cooldown && (
+                  <div className="flex justify-between py-2 border-b border-gray-200 dark:border-white/10">
+                    <span className="text-gray-600 dark:text-text-muted">Nedkjøling</span>
+                    <span className="font-medium text-gray-900 dark:text-text-primary">
+                      {session.details.cooldown}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Additional notes */}
+          {session.notes && (
+            <div className="bg-gray-50 dark:bg-white/5 rounded-xl p-4">
+              <h3 className="font-heading font-semibold text-gray-900 dark:text-text-primary mb-2">
+                Notater
+              </h3>
+              <p className="text-sm text-gray-700 dark:text-text-secondary">
+                {session.notes}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-white dark:bg-background-card border-t border-gray-200 dark:border-white/10 p-4">
+          <button
+            onClick={onClose}
+            className="btn-primary w-full"
+          >
+            Lukk
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Complete Session Modal
+function CompleteSessionModal({ session, onSave, onCancel }) {
+  const type = getWorkoutType(session.type)
+  const [formData, setFormData] = useState({
+    duration: session.duration_minutes || 60,
+    rpe: 5,
+    distance: session.details?.distance_km || 0,
+    avgPace: '',
+    surface: 'asphalt',
+    notes: ''
+  })
+
+  const isRunning = ['easy_run', 'tempo', 'interval', 'long_run', 'running'].includes(session.type)
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    onSave(session, formData)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4 overflow-y-auto">
+      <div className="bg-white dark:bg-background-card rounded-2xl max-w-md w-full my-8 shadow-xl">
+        {/* Header */}
+        <div className="bg-gradient-to-br from-success/20 to-success/5 border-b border-success/20 p-6">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-12 h-12 rounded-xl flex items-center justify-center text-xl"
+              style={{ backgroundColor: `${type.color}20` }}
+            >
+              {type.icon}
+            </div>
+            <div>
+              <h2 className="font-heading font-bold text-lg text-gray-900 dark:text-text-primary">
+                Marker som gjennomført
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-text-muted">{session.title}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Duration */}
+          <div>
+            <label htmlFor="complete-duration" className="input-label">
+              Varighet (minutter) *
+            </label>
+            <input
+              id="complete-duration"
+              type="number"
+              value={formData.duration}
+              onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value) || 0 })}
+              className="input"
+              min="1"
+              required
+            />
+          </div>
+
+          {/* RPE */}
+          <div>
+            <label htmlFor="complete-rpe" className="input-label">
+              RPE (Rate of Perceived Exertion) *
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                id="complete-rpe"
+                type="range"
+                min="1"
+                max="10"
+                value={formData.rpe}
+                onChange={(e) => setFormData({ ...formData, rpe: parseInt(e.target.value) })}
+                className="flex-1"
+              />
+              <span className="text-lg font-bold text-primary w-8 text-center">{formData.rpe}</span>
+            </div>
+            <div className="flex justify-between text-xs text-text-muted mt-1">
+              <span>Veldig lett</span>
+              <span>Maksimal</span>
+            </div>
+          </div>
+
+          {/* Running-specific fields */}
+          {isRunning && (
+            <>
+              <div>
+                <label htmlFor="complete-distance" className="input-label">
+                  Distanse (km)
+                </label>
+                <input
+                  id="complete-distance"
+                  type="number"
+                  step="0.1"
+                  value={formData.distance}
+                  onChange={(e) => setFormData({ ...formData, distance: parseFloat(e.target.value) || 0 })}
+                  className="input"
+                  min="0"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="complete-pace" className="input-label">
+                  Gjennomsnittlig fart (min/km)
+                </label>
+                <input
+                  id="complete-pace"
+                  type="text"
+                  placeholder="5:30"
+                  value={formData.avgPace}
+                  onChange={(e) => setFormData({ ...formData, avgPace: e.target.value })}
+                  className="input"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="complete-surface" className="input-label">
+                  Underlag
+                </label>
+                <select
+                  id="complete-surface"
+                  value={formData.surface}
+                  onChange={(e) => setFormData({ ...formData, surface: e.target.value })}
+                  className="input"
+                >
+                  <option value="asphalt">Asfalt</option>
+                  <option value="trail">Sti/terreng</option>
+                  <option value="track">Bane</option>
+                  <option value="treadmill">Tredemølle</option>
+                </select>
+              </div>
+            </>
+          )}
+
+          {/* Notes */}
+          <div>
+            <label htmlFor="complete-notes" className="input-label">
+              Notater
+            </label>
+            <textarea
+              id="complete-notes"
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              className="input resize-none"
+              rows={3}
+              placeholder="Hvordan følte økten seg? Eventuelle notater..."
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onCancel} className="btn-outline flex-1">
+              Avbryt
+            </button>
+            <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-2">
+              <Check size={18} />
+              Marker som gjennomført
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )
@@ -227,9 +1332,21 @@ function SessionCard({ session }) {
 function getNextMonday() {
   const today = new Date()
   const dayOfWeek = today.getDay()
-  const daysUntilMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek
-  const nextMonday = new Date(today)
-  nextMonday.setDate(today.getDate() + daysUntilMonday)
-  nextMonday.setHours(0, 0, 0, 0)
-  return nextMonday
+  // Get Monday of current week (or next Monday if today is Sunday)
+  // Sunday (0) -> next Monday (1 day ahead)
+  // Monday (1) -> today (0 days)
+  // Tuesday-Saturday -> previous Monday
+  let daysToMonday
+  if (dayOfWeek === 0) {
+    // Sunday - use next Monday
+    daysToMonday = 1
+  } else {
+    // Monday-Saturday - use Monday of this week
+    daysToMonday = -(dayOfWeek - 1)
+  }
+
+  const monday = new Date(today)
+  monday.setDate(today.getDate() + daysToMonday)
+  monday.setHours(0, 0, 0, 0)
+  return monday
 }

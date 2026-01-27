@@ -1,0 +1,17 @@
+﻿{
+  "status": "success",
+  "result": {
+    "fileName": "firebase-js-config.json",
+    "fileContents": "{\n  \"projectId\": \"smart-training-app-8bed1\",\n  \"appId\": \"1:94725606659:web:7e6120c361a594f687ad36\",\n  \"storageBucket\": \"smart-training-app-8bed1.firebasestorage.app\",\n  \"apiKey\": \"AIzaSyDwwiVT-WYDrggqs1GDjbEIoG-b5i7MYVw\",\n  \"authDomain\": \"smart-training-app-8bed1.firebaseapp.com\",\n  \"messagingSenderId\": \"94725606659\",\n  \"projectNumber\": \"94725606659\",\n  \"version\": \"2\"\n}",
+    "sdkConfig": {
+      "projectId": "smart-training-app-8bed1",
+      "appId": "1:94725606659:web:7e6120c361a594f687ad36",
+      "storageBucket": "smart-training-app-8bed1.firebasestorage.app",
+      "apiKey": "AIzaSyDwwiVT-WYDrggqs1GDjbEIoG-b5i7MYVw",
+      "authDomain": "smart-training-app-8bed1.firebaseapp.com",
+      "messagingSenderId": "94725606659",
+      "projectNumber": "94725606659",
+      "version": "2"
+    }
+  }
+}

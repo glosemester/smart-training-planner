@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -7,59 +8,74 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Bakgrunnsfarger
+        // Minimalist Backgrounds
         background: {
-          DEFAULT: '#0f0f0f',
-          secondary: '#1a1a2e',
-          card: '#16213e',
-          elevated: '#1f2937'
+          DEFAULT: '#09090b', // Zinc-950
+          secondary: '#18181b', // Zinc-900
+          card: '#18181b', // Same as secondary for now, distinct via border
+          elevated: '#27272a', // Zinc-800
+          // Light mode
+          light: {
+            DEFAULT: '#ffffff',
+            secondary: '#f4f4f5', // Zinc-100
+            card: '#ffffff',
+            elevated: '#ffffff'
+          }
         },
-        // Aksentfarger
+        // Primary Accent - International Orange / Vibrant
         primary: {
-          DEFAULT: '#ff6b35',
-          light: '#ff8c5a',
-          dark: '#e55a2b'
+          DEFAULT: '#ea580c', // Orange-600
+          light: '#f97316', // Orange-500
+          dark: '#c2410c', // Orange-700
+          subtle: 'rgba(234, 88, 12, 0.1)'
         },
+        // Secondary/Neutral
         secondary: {
-          DEFAULT: '#4361ee',
-          light: '#5a7bff',
-          dark: '#3651d4'
+          DEFAULT: '#71717a', // Zinc-500
+          light: '#a1a1aa', // Zinc-400
+          dark: '#52525b' // Zinc-600
         },
-        // Semantiske farger
-        success: '#06d6a0',
-        warning: '#ffd166',
-        error: '#ef476f',
-        // Tekstfarger
+        // Semantic
+        success: '#10b981', // Emerald-500
+        warning: '#f59e0b', // Amber-500
+        error: '#ef4444', // Red-500
+
+        // Activity Colors (Pastel/Muted for minimalism)
+        running: '#ea580c', // Orange match
+        hyrox: '#eab308', // Yellow-500
+        crossfit: '#0ea5e9', // Sky-500
+        strength: '#8b5cf6', // Violet-500
+        rest: '#71717a', // Zinc-500
+
+        // Text
         text: {
-          primary: '#f8f9fa',
-          secondary: '#adb5bd',
-          muted: '#6c757d'
-        },
-        // Treningstype-farger
-        running: '#ff6b35',
-        hyrox: '#8b5cf6',
-        crossfit: '#10b981',
-        strength: '#4361ee',
-        rest: '#6c757d'
+          primary: '#fafafa', // Zinc-50
+          secondary: '#a1a1aa', // Zinc-400
+          muted: '#52525b', // Zinc-600
+          // Light mode
+          light: {
+            primary: '#09090b',
+            secondary: '#52525b',
+            muted: '#a1a1aa'
+          }
+        }
       },
       fontFamily: {
-        heading: ['Outfit', 'system-ui', 'sans-serif'],
-        body: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        // We can keep specific headings if needed, but Inter is great for minimal
+        heading: ['Inter', 'system-ui', 'sans-serif'],
+      },
+      boxShadow: {
+        'glow-primary': '0 0 15px rgba(234, 88, 12, 0.5)', // Matches primary #ea580c
       },
       borderRadius: {
         'xl': '12px',
         '2xl': '16px',
         '3xl': '24px',
       },
-      boxShadow: {
-        'glow-primary': '0 0 20px rgba(255, 107, 53, 0.3)',
-        'glow-secondary': '0 0 20px rgba(67, 97, 238, 0.3)',
-        'glow-success': '0 0 20px rgba(6, 214, 160, 0.3)',
-      },
       animation: {
-        'fade-in': 'fadeIn 0.3s ease-out',
-        'slide-up': 'slideUp 0.4s ease-out',
-        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'fade-in': 'fadeIn 0.2s ease-out',
+        'slide-up': 'slideUp 0.3s ease-out',
       },
       keyframes: {
         fadeIn: {
@@ -67,7 +83,7 @@ export default {
           '100%': { opacity: '1' },
         },
         slideUp: {
-          '0%': { opacity: '0', transform: 'translateY(20px)' },
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
       },

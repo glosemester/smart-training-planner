@@ -1,14 +1,21 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../hooks/useAuth'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { WORKOUT_TYPES, RPE_SCALE, RUNNING_SURFACES } from '../../data/workoutTypes'
-import { ArrowLeft, Save, Camera, X } from 'lucide-react'
+import { uploadWorkoutImage } from '../../services/imageService'
+import { ArrowLeft, Save, Scan, Plus, Trash2 } from 'lucide-react'
+import ImageUpload from '../common/ImageUpload'
+import WorkoutScanner from '../common/WorkoutScanner'
 
 export default function LogWorkout() {
   const navigate = useNavigate()
-  const { addWorkout } = useWorkouts()
+  const { user } = useAuth()
+  const { addWorkout, updateWorkout } = useWorkouts()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [images, setImages] = useState([])
+  const [showScanner, setShowScanner] = useState(false)
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -34,6 +41,7 @@ export default function LogWorkout() {
 
   const selectedType = WORKOUT_TYPES[formData.type]
   const isRunning = selectedType?.category === 'running'
+  const isStrength = selectedType?.category === 'strength'
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -46,12 +54,120 @@ export default function LogWorkout() {
     }))
   }
 
+  const handleAddExercise = () => {
+    setFormData(prev => ({
+      ...prev,
+      strength: {
+        exercises: [
+          ...prev.strength.exercises,
+          { name: '', sets: '', reps: '', weight: '' }
+        ]
+      }
+    }))
+  }
+
+  const handleExerciseChange = (index, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      strength: {
+        exercises: prev.strength.exercises.map((ex, i) =>
+          i === index ? { ...ex, [field]: value } : ex
+        )
+      }
+    }))
+  }
+
+  const handleRemoveExercise = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      strength: {
+        exercises: prev.strength.exercises.filter((_, i) => i !== index)
+      }
+    }))
+  }
+
+  const handleScanComplete = (scannedData, ocrResult) => {
+    // Merge scanned data with current form data
+    setFormData(prev => ({
+      ...prev,
+      ...scannedData,
+      running: {
+        ...prev.running,
+        ...scannedData.running
+      }
+    }))
+
+    // Add OCR suggestions to notes if any
+    if (ocrResult.suggestions && !formData.notes) {
+      setFormData(prev => ({
+        ...prev,
+        notes: `[AI-skannet]\n${ocrResult.suggestions}`
+      }))
+    }
+
+    // Close scanner
+    setShowScanner(false)
+
+    // Show success message
+    setError(null)
+  }
+
+  const validateForm = () => {
+    // Validate duration
+    const duration = parseInt(formData.duration)
+    if (!duration || duration <= 0) {
+      throw new Error('Varighet må være større enn 0 minutter')
+    }
+    if (duration > 1440) { // 24 hours
+      throw new Error('Varighet kan ikke være mer enn 24 timer (1440 minutter)')
+    }
+
+    // Validate running-specific fields
+    if (isRunning) {
+      const distance = parseFloat(formData.running.distance)
+      if (distance && distance < 0) {
+        throw new Error('Distanse kan ikke være negativ')
+      }
+      if (distance && distance > 500) {
+        throw new Error('Distanse kan ikke være mer enn 500 km')
+      }
+
+      const avgHR = parseInt(formData.running.avgHR)
+      const maxHR = parseInt(formData.running.maxHR)
+
+      if (avgHR && (avgHR < 30 || avgHR > 250)) {
+        throw new Error('Snitt-puls må være mellom 30 og 250 bpm')
+      }
+
+      if (maxHR && (maxHR < 30 || maxHR > 250)) {
+        throw new Error('Maks-puls må være mellom 30 og 250 bpm')
+      }
+
+      if (avgHR && maxHR && maxHR < avgHR) {
+        throw new Error('Maks-puls kan ikke være lavere enn snitt-puls')
+      }
+
+      const elevation = parseInt(formData.running.elevation)
+      if (elevation && elevation < 0) {
+        throw new Error('Høydemeter kan ikke være negativ')
+      }
+      if (elevation && elevation > 10000) {
+        throw new Error('Høydemeter kan ikke være mer enn 10000 meter')
+      }
+    }
+
+    return true
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true)
     setError(null)
 
     try {
+      // Validate form data
+      validateForm()
+
       const workoutData = {
         ...formData,
         title: formData.title || selectedType.name,
@@ -65,10 +181,48 @@ export default function LogWorkout() {
           elevation: parseInt(formData.running.elevation) || 0,
           surface: formData.running.surface
         } : null,
+        strength: isStrength ? {
+          exercises: formData.strength.exercises
+            .filter(ex => ex.name.trim())
+            .map(ex => ({
+              name: ex.name,
+              sets: parseInt(ex.sets) || 0,
+              reps: ex.reps || '',
+              weight: parseFloat(ex.weight) || 0
+            }))
+        } : null,
         source: 'manual'
       }
 
-      await addWorkout(workoutData)
+      // Save workout first
+      const workoutId = await addWorkout(workoutData)
+
+      // Upload images if any
+      if (images.length > 0 && user) {
+        const imageUrls = []
+
+        for (const imageFile of images) {
+          // Skip if already a URL (shouldn't happen but just in case)
+          if (typeof imageFile === 'string') {
+            imageUrls.push(imageFile)
+            continue
+          }
+
+          try {
+            const imageData = await uploadWorkoutImage(user.uid, workoutId, imageFile)
+            imageUrls.push(imageData.url)
+          } catch (imgError) {
+            console.error('Failed to upload image:', imgError)
+            // Continue with other images even if one fails
+          }
+        }
+
+        // Update workout with image URLs if any were uploaded
+        if (imageUrls.length > 0) {
+          await updateWorkout(workoutId, { images: imageUrls })
+        }
+      }
+
       navigate('/workouts')
     } catch (err) {
       setError(err.message)
@@ -80,37 +234,51 @@ export default function LogWorkout() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <button 
-          onClick={() => navigate(-1)}
-          className="p-2 -ml-2 rounded-lg hover:bg-white/5"
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 -ml-2 rounded-lg hover:bg-white/5"
+          >
+            <ArrowLeft size={24} />
+          </button>
+          <h1 className="font-heading text-xl font-bold text-text-primary">
+            Logg treningsøkt
+          </h1>
+        </div>
+        <button
+          onClick={() => setShowScanner(true)}
+          className="btn-secondary flex items-center gap-2 text-sm"
+          type="button"
         >
-          <ArrowLeft size={24} />
+          <Scan size={18} />
+          Skann
         </button>
-        <h1 className="font-heading text-xl font-bold text-text-primary">
-          Logg treningsøkt
-        </h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6" aria-label="Logg treningsøkt">
         {/* Dato og type */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="input-label">Dato</label>
+            <label htmlFor="workout-date" className="input-label">Dato</label>
             <input
+              id="workout-date"
               type="date"
               value={formData.date}
               onChange={(e) => handleChange('date', e.target.value)}
               className="input"
               required
+              aria-required="true"
             />
           </div>
           <div>
-            <label className="input-label">Type</label>
+            <label htmlFor="workout-type" className="input-label">Type</label>
             <select
+              id="workout-type"
               value={formData.type}
               onChange={(e) => handleChange('type', e.target.value)}
               className="input"
+              aria-label="Velg type treningsøkt"
             >
               {Object.values(WORKOUT_TYPES).map(type => (
                 <option key={type.id} value={type.id}>
@@ -123,8 +291,9 @@ export default function LogWorkout() {
 
         {/* Tittel */}
         <div>
-          <label className="input-label">Tittel (valgfritt)</label>
+          <label htmlFor="workout-title" className="input-label">Tittel (valgfritt)</label>
           <input
+            id="workout-title"
             type="text"
             value={formData.title}
             onChange={(e) => handleChange('title', e.target.value)}
@@ -135,14 +304,16 @@ export default function LogWorkout() {
 
         {/* Varighet */}
         <div>
-          <label className="input-label">Varighet (minutter)</label>
+          <label htmlFor="workout-duration" className="input-label">Varighet (minutter)</label>
           <input
+            id="workout-duration"
             type="number"
             value={formData.duration}
             onChange={(e) => handleChange('duration', e.target.value)}
             placeholder="45"
             className="input"
             required
+            aria-required="true"
           />
         </div>
 
@@ -150,11 +321,12 @@ export default function LogWorkout() {
         {isRunning && (
           <div className="space-y-4 p-4 bg-running/10 rounded-xl">
             <h3 className="font-medium text-running">Løpedetaljer</h3>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="input-label">Distanse (km)</label>
+                <label htmlFor="running-distance" className="input-label">Distanse (km)</label>
                 <input
+                  id="running-distance"
                   type="number"
                   step="0.1"
                   value={formData.running.distance}
@@ -164,8 +336,9 @@ export default function LogWorkout() {
                 />
               </div>
               <div>
-                <label className="input-label">Snittempo</label>
+                <label htmlFor="running-pace" className="input-label">Snittempo</label>
                 <input
+                  id="running-pace"
                   type="text"
                   value={formData.running.avgPace}
                   onChange={(e) => handleRunningChange('avgPace', e.target.value)}
@@ -177,8 +350,9 @@ export default function LogWorkout() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="input-label">Snitt-puls</label>
+                <label htmlFor="running-avg-hr" className="input-label">Snitt-puls</label>
                 <input
+                  id="running-avg-hr"
                   type="number"
                   value={formData.running.avgHR}
                   onChange={(e) => handleRunningChange('avgHR', e.target.value)}
@@ -187,8 +361,9 @@ export default function LogWorkout() {
                 />
               </div>
               <div>
-                <label className="input-label">Maks puls</label>
+                <label htmlFor="running-max-hr" className="input-label">Maks puls</label>
                 <input
+                  id="running-max-hr"
                   type="number"
                   value={formData.running.maxHR}
                   onChange={(e) => handleRunningChange('maxHR', e.target.value)}
@@ -200,8 +375,9 @@ export default function LogWorkout() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="input-label">Høydemeter</label>
+                <label htmlFor="running-elevation" className="input-label">Høydemeter</label>
                 <input
+                  id="running-elevation"
                   type="number"
                   value={formData.running.elevation}
                   onChange={(e) => handleRunningChange('elevation', e.target.value)}
@@ -210,11 +386,13 @@ export default function LogWorkout() {
                 />
               </div>
               <div>
-                <label className="input-label">Underlag</label>
+                <label htmlFor="running-surface" className="input-label">Underlag</label>
                 <select
+                  id="running-surface"
                   value={formData.running.surface}
                   onChange={(e) => handleRunningChange('surface', e.target.value)}
                   className="input"
+                  aria-label="Velg underlag"
                 >
                   {RUNNING_SURFACES.map(s => (
                     <option key={s.id} value={s.id}>
@@ -227,18 +405,104 @@ export default function LogWorkout() {
           </div>
         )}
 
+        {/* Styrke-spesifikke felt (Hyrox, CrossFit, Styrke) */}
+        {isStrength && (
+          <div className="space-y-4 p-4 bg-strength/10 rounded-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium text-strength">Øvelser</h3>
+              <button
+                type="button"
+                onClick={handleAddExercise}
+                className="btn-secondary text-sm py-2 px-3 flex items-center gap-1"
+              >
+                <Plus size={16} />
+                Legg til øvelse
+              </button>
+            </div>
+
+            {formData.strength.exercises.length === 0 ? (
+              <p className="text-text-muted text-sm text-center py-4">
+                Ingen øvelser lagt til. Klikk "Legg til øvelse" for å registrere vekter.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {formData.strength.exercises.map((exercise, index) => (
+                  <div key={index} className="p-3 bg-background-tertiary rounded-lg space-y-3">
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="text"
+                        value={exercise.name}
+                        onChange={(e) => handleExerciseChange(index, 'name', e.target.value)}
+                        placeholder="Øvelse (f.eks. Deadlift)"
+                        className="input flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveExercise(index)}
+                        className="p-2 rounded-lg bg-error/20 hover:bg-error/30 transition-colors"
+                        aria-label="Fjern øvelse"
+                      >
+                        <Trash2 size={18} className="text-error" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="input-label text-xs">Sett</label>
+                        <input
+                          type="number"
+                          value={exercise.sets}
+                          onChange={(e) => handleExerciseChange(index, 'sets', e.target.value)}
+                          placeholder="3"
+                          className="input text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="input-label text-xs">Reps</label>
+                        <input
+                          type="text"
+                          value={exercise.reps}
+                          onChange={(e) => handleExerciseChange(index, 'reps', e.target.value)}
+                          placeholder="10"
+                          className="input text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="input-label text-xs">Vekt (kg)</label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          value={exercise.weight}
+                          onChange={(e) => handleExerciseChange(index, 'weight', e.target.value)}
+                          placeholder="60"
+                          className="input text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* RPE */}
         <div>
-          <label className="input-label">
+          <label htmlFor="workout-rpe" className="input-label">
             Opplevd anstrengelse (RPE): {formData.rpe}
           </label>
           <input
+            id="workout-rpe"
             type="range"
             min="1"
             max="10"
             value={formData.rpe}
             onChange={(e) => handleChange('rpe', e.target.value)}
             className="w-full h-2 bg-background-secondary rounded-lg appearance-none cursor-pointer accent-primary"
+            aria-label={`Opplevd anstrengelse: ${formData.rpe} av 10`}
+            aria-valuemin="1"
+            aria-valuemax="10"
+            aria-valuenow={formData.rpe}
           />
           <div className="flex justify-between text-xs text-text-muted mt-1">
             <span>Lett</span>
@@ -249,8 +513,9 @@ export default function LogWorkout() {
 
         {/* Notater */}
         <div>
-          <label className="input-label">Notater</label>
+          <label htmlFor="workout-notes" className="input-label">Notater</label>
           <textarea
+            id="workout-notes"
             value={formData.notes}
             onChange={(e) => handleChange('notes', e.target.value)}
             placeholder="Hvordan føltes økten?"
@@ -259,9 +524,23 @@ export default function LogWorkout() {
           />
         </div>
 
+        {/* Images */}
+        <div>
+          <label className="input-label">Bilder</label>
+          <ImageUpload
+            images={images}
+            onImagesChange={setImages}
+            maxImages={5}
+          />
+        </div>
+
         {/* Error */}
         {error && (
-          <div className="p-4 bg-error/10 border border-error/20 rounded-xl text-error text-sm">
+          <div
+            className="p-4 bg-error/10 border border-error/20 rounded-xl text-error text-sm"
+            role="alert"
+            aria-live="assertive"
+          >
             {error}
           </div>
         )}
@@ -271,9 +550,10 @@ export default function LogWorkout() {
           type="submit"
           disabled={saving}
           className="btn-primary w-full py-4"
+          aria-label={saving ? 'Lagrer treningsøkt' : 'Lagre treningsøkt'}
         >
           {saving ? (
-            <div className="spinner" />
+            <div className="spinner" aria-hidden="true" />
           ) : (
             <>
               <Save size={20} />
@@ -282,6 +562,14 @@ export default function LogWorkout() {
           )}
         </button>
       </form>
+
+      {/* Workout Scanner Modal */}
+      {showScanner && (
+        <WorkoutScanner
+          onDataExtracted={handleScanComplete}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
     </div>
   )
 }

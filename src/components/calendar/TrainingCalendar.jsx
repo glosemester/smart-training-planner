@@ -1,0 +1,1162 @@
+import { useState, useMemo } from 'react'
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, startOfWeek, endOfWeek, isSameMonth, isToday, isSameDay, isPast, differenceInDays } from 'date-fns'
+import { nb } from 'date-fns/locale'
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, Clock, MapPin, CheckCircle, Edit, TrendingUp, Target, Flame, Grid3x3, List, Share2, Download, FileText, Image } from 'lucide-react'
+import { useWorkouts } from '../../hooks/useWorkouts'
+import { getWorkoutType } from '../../data/workoutTypes'
+import { useNavigate } from 'react-router-dom'
+import { useToast } from '../../hooks/useToast'
+import ToastContainer from '../common/ToastContainer'
+import { shareAchievement } from '../../utils/shareUtils'
+import { exportCalendarAsPNG, exportCalendarAsPDF, shareCalendarImage } from '../../utils/calendarExport'
+
+export default function TrainingCalendar() {
+  const { plans, workouts, updatePlanSession } = useWorkouts()
+  const navigate = useNavigate()
+  const toast = useToast()
+  const [startDate, setStartDate] = useState(new Date())
+  const [viewMode, setViewMode] = useState('month') // 'month' or 'week'
+  const [selectedDate, setSelectedDate] = useState(null)
+  const [showDayDetail, setShowDayDetail] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [draggedSession, setDraggedSession] = useState(null)
+  const [draggedPlan, setDraggedPlan] = useState(null)
+  const [showExportMenu, setShowExportMenu] = useState(false)
+  const [exporting, setExporting] = useState(false)
+
+  // Generate 6 months of dates
+  const monthsToShow = useMemo(() => {
+    const months = []
+    for (let i = 0; i < 6; i++) {
+      const monthDate = addMonths(startOfMonth(startDate), i)
+      months.push(monthDate)
+    }
+    return months
+  }, [startDate])
+
+  // Generate week dates (for week view)
+  const weekDays = useMemo(() => {
+    const weekStart = startOfWeek(startDate, { weekStartsOn: 1 }) // Monday
+    return eachDayOfInterval({
+      start: weekStart,
+      end: endOfWeek(weekStart, { weekStartsOn: 1 })
+    })
+  }, [startDate])
+
+  // Get all sessions and workouts for a specific date
+  const getSessionsForDate = (date) => {
+    const sessions = []
+
+    // Find planned sessions from plans
+    plans.forEach(plan => {
+      if (!plan.sessions) return
+
+      const weekStart = plan.weekStart?.toDate?.() || new Date(plan.weekStart)
+
+      plan.sessions.forEach(session => {
+        // Map day to actual date
+        const dayIndex = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].indexOf(session.day)
+        if (dayIndex === -1) return
+
+        const sessionDate = new Date(weekStart)
+        sessionDate.setDate(weekStart.getDate() + dayIndex)
+
+        if (isSameDay(sessionDate, date)) {
+          sessions.push({
+            ...session,
+            source: 'plan',
+            status: session.status || 'planned'
+          })
+        }
+      })
+    })
+
+    // Add completed workouts
+    workouts.forEach(workout => {
+      const workoutDate = workout.date?.toDate?.() || new Date(workout.date)
+
+      if (isSameDay(workoutDate, date)) {
+        sessions.push({
+          ...workout,
+          source: 'workout',
+          status: 'completed'
+        })
+      }
+    })
+
+    return sessions
+  }
+
+  const goToToday = () => {
+    setStartDate(new Date())
+  }
+
+  const goToPrevious = () => {
+    if (viewMode === 'week') {
+      setStartDate(prev => {
+        const newDate = new Date(prev)
+        newDate.setDate(prev.getDate() - 7)
+        return newDate
+      })
+    } else {
+      setStartDate(prev => addMonths(prev, -1))
+    }
+  }
+
+  const goToNext = () => {
+    if (viewMode === 'week') {
+      setStartDate(prev => {
+        const newDate = new Date(prev)
+        newDate.setDate(prev.getDate() + 7)
+        return newDate
+      })
+    } else {
+      setStartDate(prev => addMonths(prev, 1))
+    }
+  }
+
+  const handleExportPNG = async () => {
+    try {
+      setExporting(true)
+      await exportCalendarAsPNG('calendar-export-area')
+      toast.success('📸 Kalender eksportert som bilde!')
+      setShowExportMenu(false)
+    } catch (error) {
+      toast.error('Kunne ikke eksportere kalender')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleExportPDF = async () => {
+    try {
+      setExporting(true)
+      await exportCalendarAsPDF('calendar-export-area')
+      toast.success('📄 Kalender eksportert som PDF!')
+      setShowExportMenu(false)
+    } catch (error) {
+      toast.error('Kunne ikke eksportere kalender')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleShareImage = async () => {
+    try {
+      setExporting(true)
+      const shared = await shareCalendarImage('calendar-export-area')
+      if (shared) {
+        toast.success('📤 Kalender delt!')
+      } else {
+        toast.success('📸 Kalender lastet ned!')
+      }
+      setShowExportMenu(false)
+    } catch (error) {
+      toast.error('Kunne ikke dele kalender')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleDayClick = (date, sessions) => {
+    if (sessions.length > 0) {
+      setSelectedDate(date)
+      setShowDayDetail(true)
+    }
+  }
+
+  const handleMarkCompleted = async (session) => {
+    try {
+      setLoading(true)
+
+      // Find the plan that contains this session
+      const plan = plans.find(p =>
+        p.sessions?.some(s => s.id === session.id)
+      )
+
+      if (!plan) {
+        throw new Error('Could not find plan for session')
+      }
+
+      // Update session status to completed
+      await updatePlanSession(plan.id, session.id, {
+        status: 'completed',
+        completedAt: new Date()
+      })
+
+      const workoutType = getWorkoutType(session.type)
+      toast.success(`${workoutType.icon} ${session.title || workoutType.name} markert som fullført!`)
+    } catch (error) {
+      console.error('Failed to mark session as completed:', error)
+      toast.error('Kunne ikke markere økten som fullført. Prøv igjen.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleLogWorkout = () => {
+    setShowDayDetail(false)
+    navigate('/workouts/new')
+  }
+
+  const handleDragStart = (session, plan, e) => {
+    if (session.source === 'workout') return // Don't allow dragging completed workouts
+
+    setDraggedSession(session)
+    setDraggedPlan(plan)
+
+    // Add drag effect
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/html', e.target.innerHTML)
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDrop = async (targetDate, e) => {
+    e.preventDefault()
+
+    if (!draggedSession || !draggedPlan) return
+
+    try {
+      setLoading(true)
+
+      // Calculate the new day for the session
+      const newDay = format(targetDate, 'EEEE', { locale: nb }).toLowerCase()
+      const dayMap = {
+        'mandag': 'monday',
+        'tirsdag': 'tuesday',
+        'onsdag': 'wednesday',
+        'torsdag': 'thursday',
+        'fredag': 'friday',
+        'lørdag': 'saturday',
+        'søndag': 'sunday'
+      }
+
+      const englishDay = dayMap[newDay] || newDay
+
+      // Update the session with new day
+      await updatePlanSession(draggedPlan.id, draggedSession.id, {
+        day: englishDay,
+        movedBy: 'user',
+        movedAt: new Date()
+      })
+
+      const workoutType = getWorkoutType(draggedSession.type)
+      const dayLabel = format(targetDate, 'EEEE d. MMMM', { locale: nb })
+      toast.success(`${workoutType.icon} ${workoutType.name} flyttet til ${dayLabel}`)
+    } catch (error) {
+      console.error('Failed to move session:', error)
+      toast.error('Kunne ikke flytte økten. Prøv igjen.')
+    } finally {
+      setLoading(false)
+      setDraggedSession(null)
+      setDraggedPlan(null)
+    }
+  }
+
+  const handleDragEnd = () => {
+    setDraggedSession(null)
+    setDraggedPlan(null)
+  }
+
+  const selectedSessions = selectedDate ? getSessionsForDate(selectedDate) : []
+
+  // Calculate completion statistics
+  const stats = useMemo(() => {
+    const today = new Date()
+    const weekStart = startOfWeek(today, { weekStartsOn: 1 })
+    const monthStart = startOfMonth(today)
+
+    let weekPlanned = 0
+    let weekCompleted = 0
+    let monthPlanned = 0
+    let monthCompleted = 0
+
+    // Count planned vs completed for current week and month
+    plans.forEach(plan => {
+      if (!plan.sessions) return
+
+      const planWeekStart = plan.weekStart?.toDate?.() || new Date(plan.weekStart)
+
+      plan.sessions.forEach(session => {
+        const dayIndex = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].indexOf(session.day)
+        if (dayIndex === -1) return
+
+        const sessionDate = new Date(planWeekStart)
+        sessionDate.setDate(planWeekStart.getDate() + dayIndex)
+
+        // Only count past and today sessions
+        if (sessionDate > today) return
+
+        // Week stats
+        if (sessionDate >= weekStart && sessionDate <= today) {
+          weekPlanned++
+          if (session.status === 'completed') weekCompleted++
+        }
+
+        // Month stats
+        if (sessionDate >= monthStart && sessionDate <= today) {
+          monthPlanned++
+          if (session.status === 'completed') monthCompleted++
+        }
+      })
+    })
+
+    // Calculate streak
+    let currentStreak = 0
+    let bestStreak = 0
+    let tempStreak = 0
+    let lastWorkoutDate = null
+
+    // Get all workout dates (from both completed sessions and logged workouts)
+    const workoutDates = new Set()
+
+    // Add completed sessions
+    plans.forEach(plan => {
+      if (!plan.sessions) return
+      const planWeekStart = plan.weekStart?.toDate?.() || new Date(plan.weekStart)
+
+      plan.sessions.forEach(session => {
+        if (session.status === 'completed') {
+          const dayIndex = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].indexOf(session.day)
+          if (dayIndex !== -1) {
+            const sessionDate = new Date(planWeekStart)
+            sessionDate.setDate(planWeekStart.getDate() + dayIndex)
+            workoutDates.add(format(sessionDate, 'yyyy-MM-dd'))
+          }
+        }
+      })
+    })
+
+    // Add logged workouts
+    workouts.forEach(workout => {
+      const workoutDate = workout.date?.toDate?.() || new Date(workout.date)
+      workoutDates.add(format(workoutDate, 'yyyy-MM-dd'))
+    })
+
+    // Sort dates and calculate streaks
+    const sortedDates = Array.from(workoutDates).sort().reverse()
+
+    for (let i = 0; i < sortedDates.length; i++) {
+      const currentDate = new Date(sortedDates[i])
+
+      if (lastWorkoutDate === null) {
+        // First workout
+        const daysDiff = differenceInDays(today, currentDate)
+        if (daysDiff <= 1) {
+          // Today or yesterday
+          tempStreak = 1
+          currentStreak = 1
+        } else {
+          tempStreak = 1
+        }
+      } else {
+        const daysDiff = differenceInDays(lastWorkoutDate, currentDate)
+        if (daysDiff === 1) {
+          // Consecutive day
+          tempStreak++
+          if (currentStreak > 0) currentStreak++
+        } else {
+          // Gap in streak
+          if (currentStreak > 0) {
+            // End current streak
+            currentStreak = 0
+          }
+          tempStreak = 1
+        }
+      }
+
+      if (tempStreak > bestStreak) {
+        bestStreak = tempStreak
+      }
+
+      lastWorkoutDate = currentDate
+    }
+
+    return {
+      weekCompleted,
+      weekPlanned,
+      weekRate: weekPlanned > 0 ? Math.round((weekCompleted / weekPlanned) * 100) : 0,
+      monthCompleted,
+      monthPlanned,
+      monthRate: monthPlanned > 0 ? Math.round((monthCompleted / monthPlanned) * 100) : 0,
+      currentStreak,
+      bestStreak
+    }
+  }, [plans, workouts])
+
+  return (
+    <>
+      <ToastContainer toasts={toast.toasts} removeToast={toast.removeToast} />
+      <div className="min-h-screen bg-background pb-24 px-4 pt-6">
+        {/* Export wrapper */}
+        <div id="calendar-export-area">
+        {/* Header */}
+      <div className="mb-6 animate-fade-in-up">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+              <CalendarIcon size={28} className="text-primary animate-pulse-subtle" />
+              Treningskalender
+            </h1>
+            <p className="text-text-muted text-sm mt-1">
+              {viewMode === 'month' ? '6 måneder fremover' : 'Ukevisning'} • Dra for å flytte økter
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* View toggle */}
+            <div className="bg-background-secondary rounded-lg p-1 flex gap-1">
+              <button
+                onClick={() => setViewMode('month')}
+                className={`p-2 rounded transition-all duration-200 ${
+                  viewMode === 'month'
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'text-text-muted hover:text-text-secondary'
+                }`}
+                aria-label="Månedsvisning"
+              >
+                <Grid3x3 size={16} />
+              </button>
+              <button
+                onClick={() => setViewMode('week')}
+                className={`p-2 rounded transition-all duration-200 ${
+                  viewMode === 'week'
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'text-text-muted hover:text-text-secondary'
+                }`}
+                aria-label="Ukevisning"
+              >
+                <List size={16} />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={goToToday}
+                className="btn-secondary px-4 py-2 text-sm hover:scale-105 transition-transform"
+              >
+                I dag
+              </button>
+
+              {/* Export menu */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  className="btn-ghost px-3 py-2 text-sm hover:scale-105 transition-transform"
+                  disabled={exporting}
+                  aria-label="Eksporter kalender"
+                >
+                  <Download size={18} className={exporting ? 'animate-pulse' : ''} />
+                </button>
+
+                {showExportMenu && (
+                  <>
+                    {/* Backdrop */}
+                    <div
+                      onClick={() => setShowExportMenu(false)}
+                      className="fixed inset-0 z-40"
+                    />
+
+                    {/* Menu */}
+                    <div className="absolute right-0 mt-2 w-48 bg-background-secondary rounded-xl border border-white/10 shadow-xl z-50 overflow-hidden animate-fade-in-up">
+                      <button
+                        onClick={handleExportPNG}
+                        disabled={exporting}
+                        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-white/5 transition-colors text-left disabled:opacity-50"
+                      >
+                        <Image size={18} className="text-primary" />
+                        <span className="text-sm">Eksporter som bilde</span>
+                      </button>
+
+                      <button
+                        onClick={handleExportPDF}
+                        disabled={exporting}
+                        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-white/5 transition-colors text-left disabled:opacity-50"
+                      >
+                        <FileText size={18} className="text-secondary" />
+                        <span className="text-sm">Eksporter som PDF</span>
+                      </button>
+
+                      <button
+                        onClick={handleShareImage}
+                        disabled={exporting}
+                        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-white/5 transition-colors text-left disabled:opacity-50"
+                      >
+                        <Share2 size={18} className="text-success" />
+                        <span className="text-sm">Del kalender</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <div className="flex items-center justify-between mb-4">
+          <button
+            onClick={goToPrevious}
+            className="p-2 rounded-lg bg-background-secondary hover:bg-background-tertiary transition-colors"
+          >
+            <ChevronLeft size={20} className="text-text-secondary" />
+          </button>
+
+          <div className="text-center">
+            <p className="text-lg font-semibold text-white">
+              {viewMode === 'week'
+                ? `Uke ${format(weekDays[0], 'w', { locale: nb })} - ${format(weekDays[0], 'MMM yyyy', { locale: nb })}`
+                : format(startDate, 'MMMM yyyy', { locale: nb })
+              }
+            </p>
+            <p className="text-xs text-text-muted">
+              {viewMode === 'week'
+                ? `${format(weekDays[0], 'd. MMM', { locale: nb })} - ${format(weekDays[6], 'd. MMM', { locale: nb })}`
+                : 'Viser 6 måneder'
+              }
+            </p>
+          </div>
+
+          <button
+            onClick={goToNext}
+            className="p-2 rounded-lg bg-background-secondary hover:bg-background-tertiary transition-colors"
+          >
+            <ChevronRight size={20} className="text-text-secondary" />
+          </button>
+        </div>
+
+        {/* Completion Statistics */}
+        <div className="grid grid-cols-3 gap-3">
+          {/* Week completion */}
+          <div className="bg-background-secondary rounded-xl p-3 border border-white/5 hover:border-primary/30 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-primary/10 relative group">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Target size={16} className="text-primary" />
+                <span className="text-xs font-medium text-text-muted">Uke</span>
+              </div>
+              {stats.weekRate === 100 && stats.weekCompleted > 0 && (
+                <button
+                  onClick={async () => {
+                    const success = await shareAchievement('weekly_goal', {
+                      completed: stats.weekCompleted,
+                      planned: stats.weekPlanned,
+                      rate: stats.weekRate
+                    })
+                    toast.success(success ? '🎯 Ukemål delt!' : '📋 Kopiert til utklippstavle')
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-primary/20"
+                  aria-label="Del ukemål"
+                >
+                  <Share2 size={12} className="text-primary" />
+                </button>
+              )}
+            </div>
+            <div className="flex flex-col">
+              <span className="text-2xl font-bold text-white animate-scale-up">{stats.weekRate}%</span>
+              <span className="text-[10px] text-text-muted mt-0.5">
+                {stats.weekCompleted}/{stats.weekPlanned} økter
+              </span>
+            </div>
+          </div>
+
+          {/* Month completion */}
+          <div className="bg-background-secondary rounded-xl p-3 border border-white/5 hover:border-secondary/30 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-secondary/10 relative group">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <TrendingUp size={16} className="text-secondary" />
+                <span className="text-xs font-medium text-text-muted">Måned</span>
+              </div>
+              {stats.monthCompleted >= 10 && (
+                <button
+                  onClick={async () => {
+                    const success = await shareAchievement('monthly_goal', {
+                      completed: stats.monthCompleted
+                    })
+                    toast.success(success ? '📊 Månedsmål delt!' : '📋 Kopiert til utklippstavle')
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-secondary/20"
+                  aria-label="Del månedsmål"
+                >
+                  <Share2 size={12} className="text-secondary" />
+                </button>
+              )}
+            </div>
+            <div className="flex flex-col">
+              <span className="text-2xl font-bold text-white animate-scale-up">{stats.monthRate}%</span>
+              <span className="text-[10px] text-text-muted mt-0.5">
+                {stats.monthCompleted}/{stats.monthPlanned} økter
+              </span>
+            </div>
+          </div>
+
+          {/* Streak */}
+          <div className="bg-background-secondary rounded-xl p-3 border border-white/5 hover:border-warning/30 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-warning/10 relative group">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Flame size={16} className={`text-warning ${stats.currentStreak > 0 ? 'animate-pulse-subtle' : ''}`} />
+                <span className="text-xs font-medium text-text-muted">Streak</span>
+              </div>
+              {stats.currentStreak >= 3 && (
+                <button
+                  onClick={async () => {
+                    const success = await shareAchievement('streak', { days: stats.currentStreak })
+                    if (success) {
+                      toast.success('🔥 Streak delt!')
+                    } else {
+                      toast.info('📋 Kopiert til utklippstavle')
+                    }
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-warning/20"
+                  aria-label="Del streak"
+                >
+                  <Share2 size={12} className="text-warning" />
+                </button>
+              )}
+            </div>
+            <div className="flex flex-col">
+              <span className="text-2xl font-bold text-white animate-scale-up">{stats.currentStreak}</span>
+              <span className="text-[10px] text-text-muted mt-0.5">
+                {stats.currentStreak === 1 ? 'dag' : 'dager'} (best: {stats.bestStreak})
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Calendar Grid */}
+      {viewMode === 'month' ? (
+        <div className="space-y-8">
+          {monthsToShow.map((monthDate, monthIndex) => (
+            <MonthView
+              key={monthIndex}
+              monthDate={monthDate}
+              getSessionsForDate={getSessionsForDate}
+              onDayClick={handleDayClick}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              onDragEnd={handleDragEnd}
+              plans={plans}
+              isDragging={!!draggedSession}
+            />
+          ))}
+        </div>
+      ) : (
+        <WeekView
+          weekDays={weekDays}
+          getSessionsForDate={getSessionsForDate}
+          onDayClick={handleDayClick}
+          onMarkCompleted={handleMarkCompleted}
+          loading={loading}
+        />
+      )}
+      </div>
+      {/* End export wrapper */}
+
+      {/* Day Detail Modal */}
+      {showDayDetail && selectedDate && (
+        <DayDetailModal
+          date={selectedDate}
+          sessions={selectedSessions}
+          onClose={() => setShowDayDetail(false)}
+          onMarkCompleted={handleMarkCompleted}
+          onLogWorkout={handleLogWorkout}
+          loading={loading}
+        />
+      )}
+      </div>
+    </>
+  )
+}
+
+function WeekView({ weekDays, getSessionsForDate, onDayClick, onMarkCompleted, loading }) {
+  return (
+    <div className="space-y-3">
+      {weekDays.map((day, index) => {
+        const sessions = getSessionsForDate(day)
+        const dayIsToday = isToday(day)
+        const dayIsPast = isPast(day) && !dayIsToday
+
+        return (
+          <div
+            key={index}
+            className={`
+              bg-background-secondary rounded-2xl p-4 border
+              transition-all duration-300
+              hover:scale-[1.02] hover:shadow-lg
+              ${dayIsToday
+                ? 'border-primary shadow-lg shadow-primary/20'
+                : 'border-white/5 hover:border-white/10'
+              }
+              animate-fade-in-up
+            `}
+            style={{ animationDelay: `${index * 50}ms` }}
+          >
+            {/* Day header */}
+            <div className="flex items-center justify-between mb-3 pb-3 border-b border-white/5">
+              <div>
+                <h3 className={`font-semibold ${dayIsToday ? 'text-primary' : 'text-white'}`}>
+                  {format(day, 'EEEE', { locale: nb })}
+                </h3>
+                <p className="text-sm text-text-muted">
+                  {format(day, 'd. MMMM yyyy', { locale: nb })}
+                </p>
+              </div>
+              {dayIsToday && (
+                <div className="bg-primary/20 text-primary px-3 py-1 rounded-full text-xs font-medium">
+                  I dag
+                </div>
+              )}
+            </div>
+
+            {/* Sessions for this day */}
+            {sessions.length > 0 ? (
+              <div className="space-y-2">
+                {sessions.map((session, idx) => {
+                  const workoutType = getWorkoutType(session.type)
+                  const isCompleted = session.status === 'completed'
+                  const canComplete = session.source === 'plan' && !isCompleted && (dayIsPast || dayIsToday)
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`
+                        p-3 rounded-xl border transition-all
+                        ${isCompleted
+                          ? 'bg-success/5 border-success/20'
+                          : 'bg-background-tertiary border-white/10 hover:border-white/20'
+                        }
+                      `}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`text-2xl flex-shrink-0`}>
+                          {workoutType.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold text-white text-sm">
+                            {session.title || workoutType.name}
+                          </h4>
+                          <p className={`text-xs ${isCompleted ? 'text-success' : 'text-text-muted'}`}>
+                            {workoutType.name}
+                            {session.duration_minutes && ` • ${session.duration_minutes} min`}
+                          </p>
+                          {session.description && (
+                            <p className="text-sm text-text-secondary mt-1 line-clamp-2">
+                              {session.description}
+                            </p>
+                          )}
+
+                          {/* Complete button */}
+                          {canComplete && (
+                            <button
+                              onClick={() => onMarkCompleted(session)}
+                              disabled={loading}
+                              className="mt-2 btn-primary py-1.5 px-3 text-xs hover:scale-105 transition-transform"
+                            >
+                              {loading ? 'Markerer...' : '✓ Marker som fullført'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-text-muted text-sm">
+                <p>Ingen økter planlagt</p>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function MonthView({ monthDate, getSessionsForDate, onDayClick, onDragStart, onDragOver, onDrop, onDragEnd, plans, isDragging }) {
+  const monthStart = startOfMonth(monthDate)
+  const monthEnd = endOfMonth(monthDate)
+
+  // Get calendar grid (include previous/next month days to fill weeks)
+  const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 }) // Monday
+  const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 }) // Sunday
+
+  const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd })
+
+  // Group into weeks
+  const weeks = []
+  for (let i = 0; i < days.length; i += 7) {
+    weeks.push(days.slice(i, i + 7))
+  }
+
+  return (
+    <div className="bg-background-secondary rounded-2xl p-4 border border-white/5 animate-fade-in-up hover:border-white/10 transition-colors">
+      {/* Month header */}
+      <h2 className="text-lg font-bold text-white mb-4 capitalize flex items-center gap-2">
+        {format(monthDate, 'MMMM yyyy', { locale: nb })}
+        <span className="text-xs font-normal text-text-muted">
+          ({days.length / 7} uker)
+        </span>
+      </h2>
+
+      {/* Weekday headers */}
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {['Ma', 'Ti', 'On', 'To', 'Fr', 'Lø', 'Sø'].map((day, i) => (
+          <div
+            key={i}
+            className="text-center text-xs font-medium text-text-muted py-2"
+          >
+            {day}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar days */}
+      <div className="space-y-1">
+        {weeks.map((week, weekIndex) => (
+          <div key={weekIndex} className="grid grid-cols-7 gap-1">
+            {week.map((day, dayIndex) => {
+              const sessions = getSessionsForDate(day)
+              const isCurrentMonth = isSameMonth(day, monthDate)
+              const isCurrentDay = isToday(day)
+
+              return (
+                <DayCell
+                  key={dayIndex}
+                  date={day}
+                  sessions={sessions}
+                  isCurrentMonth={isCurrentMonth}
+                  isToday={isCurrentDay}
+                  onClick={() => onDayClick(day, sessions)}
+                  onDragStart={onDragStart}
+                  onDragOver={onDragOver}
+                  onDrop={onDrop}
+                  onDragEnd={onDragEnd}
+                  plans={plans}
+                  isDragging={isDragging}
+                />
+              )
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function DayCell({ date, sessions, isCurrentMonth, isToday, onClick, onDragStart, onDragOver, onDrop, onDragEnd, plans, isDragging }) {
+  const dayNumber = format(date, 'd')
+
+  // Count sessions by status
+  const planned = sessions.filter(s => s.status === 'planned').length
+  const completed = sessions.filter(s => s.status === 'completed').length
+  const total = sessions.length
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    onDragOver(e)
+  }
+
+  const handleDrop = (e) => {
+    e.stopPropagation()
+    onDrop(date, e)
+  }
+
+  const handleSessionDragStart = (session, e) => {
+    e.stopPropagation()
+
+    // Find the plan that contains this session
+    const plan = plans.find(p =>
+      p.sessions?.some(s => s.id === session.id)
+    )
+
+    if (plan && session.source === 'plan') {
+      onDragStart(session, plan, e)
+    }
+  }
+
+  return (
+    <div
+      onClick={onClick}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      className={`
+        relative aspect-square rounded-lg p-1 transition-all duration-300
+        ${isCurrentMonth ? 'bg-background-tertiary' : 'bg-background-secondary/50'}
+        ${isToday ? 'ring-2 ring-primary animate-pulse-ring' : completed > 0 && planned === 0 ? 'border-2 border-success/40' : planned > 0 ? 'border-2 border-error/40' : 'border border-white/5'}
+        ${total > 0 ? 'hover:scale-110 cursor-pointer active:scale-95 hover:shadow-lg' : ''}
+        ${isDragging && isCurrentMonth ? 'ring-2 ring-secondary/50 scale-110 bg-secondary/5 animate-pulse-ring' : ''}
+      `}
+    >
+      {/* Day number */}
+      <div
+        className={`
+          text-xs font-medium text-center mb-1
+          ${isToday ? 'text-primary font-bold' : isCurrentMonth ? 'text-white' : 'text-text-muted'}
+        `}
+      >
+        {dayNumber}
+      </div>
+
+      {/* Session indicators - More visible markers */}
+      {total > 0 && (
+        <div className="space-y-0.5 flex flex-col items-center">
+          {/* Show first 2 sessions as larger colored dots */}
+          {sessions.slice(0, 2).map((session, idx) => {
+            const workoutType = getWorkoutType(session.type)
+            const isCompleted = session.status === 'completed'
+            const isDraggable = session.source === 'plan' && !isCompleted
+
+            return (
+              <div
+                key={idx}
+                draggable={isDraggable}
+                onDragStart={(e) => handleSessionDragStart(session, e)}
+                onDragEnd={onDragEnd}
+                className={`
+                  w-1.5 h-1.5 rounded-full transition-all shadow-sm
+                  ${isCompleted ? 'bg-success shadow-success/50' : 'bg-error shadow-error/50'}
+                  ${isDraggable ? 'cursor-move hover:scale-150 hover:shadow-md' : ''}
+                `}
+                title={`${session.title || workoutType.name} - ${isCompleted ? 'Fullført' : 'Planlagt'}`}
+              />
+            )
+          })}
+
+          {/* Show count if more than 2 */}
+          {total > 2 && (
+            <div className="text-[9px] text-white font-bold bg-primary/80 px-1 rounded-full">
+              +{total - 2}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Status badge on day cell - corner markers */}
+      {completed > 0 && planned === 0 && (
+        <div className="absolute top-0.5 right-0.5">
+          <div className="w-2 h-2 rounded-full bg-success shadow-md shadow-success/50" />
+        </div>
+      )}
+      {planned > 0 && completed === 0 && (
+        <div className="absolute top-0.5 right-0.5">
+          <div className="w-2 h-2 rounded-full bg-error shadow-md shadow-error/50" />
+        </div>
+      )}
+      {completed > 0 && planned > 0 && (
+        <div className="absolute top-0.5 right-0.5 flex gap-0.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-success shadow-sm shadow-success/50" />
+          <div className="w-1.5 h-1.5 rounded-full bg-error shadow-sm shadow-error/50" />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DayDetailModal({ date, sessions, onClose, onMarkCompleted, onLogWorkout, loading }) {
+  const formattedDate = format(date, 'EEEE d. MMMM yyyy', { locale: nb })
+  const isPastDate = isPast(date) && !isToday(date)
+
+  // Group by status
+  const planned = sessions.filter(s => s.status === 'planned')
+  const completed = sessions.filter(s => s.status === 'completed')
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in-up">
+      <div className="bg-background-secondary rounded-3xl w-full max-w-lg max-h-[80vh] overflow-y-auto border border-white/10 shadow-2xl pb-8 animate-slide-in-right">
+        {/* Header */}
+        <div className="sticky top-0 bg-background-secondary border-b border-white/10 p-4 flex items-center justify-between rounded-t-3xl">
+          <div>
+            <h2 className="text-lg font-bold text-white capitalize">
+              {formattedDate}
+            </h2>
+            <p className="text-sm text-text-muted">
+              {sessions.length} økt{sessions.length !== 1 ? 'er' : ''}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-full bg-background-tertiary hover:bg-background-primary transition-colors"
+            aria-label="Lukk"
+          >
+            <X size={20} className="text-text-secondary" />
+          </button>
+        </div>
+
+        {/* Sessions list */}
+        <div className="p-4 space-y-4">
+          {/* Completed sessions */}
+          {completed.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-success mb-2 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-success" />
+                Fullført ({completed.length})
+              </h3>
+              <div className="space-y-2">
+                {completed.map((session, idx) => (
+                  <SessionCard
+                    key={idx}
+                    session={session}
+                    onMarkCompleted={null}
+                    loading={loading}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Planned sessions */}
+          {planned.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-primary mb-2 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-primary" />
+                Planlagt ({planned.length})
+              </h3>
+              <div className="space-y-2">
+                {planned.map((session, idx) => (
+                  <SessionCard
+                    key={idx}
+                    session={session}
+                    onMarkCompleted={onMarkCompleted}
+                    loading={loading}
+                    showCompleteButton={isPastDate || isToday(date)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          {planned.length > 0 && (isPastDate || isToday(date)) && (
+            <div className="pt-2 border-t border-white/10">
+              <button
+                onClick={onLogWorkout}
+                className="btn-secondary w-full py-3 flex items-center justify-center gap-2"
+              >
+                <Edit size={18} />
+                Logg ny økt
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SessionCard({ session, onMarkCompleted, loading, showCompleteButton }) {
+  const workoutType = getWorkoutType(session.type)
+  const isCompleted = session.status === 'completed'
+
+  return (
+    <div
+      className={`
+        p-4 rounded-xl border transition-all
+        ${isCompleted
+          ? 'bg-success/5 border-success/20'
+          : 'bg-background-tertiary border-white/10'
+        }
+      `}
+    >
+      {/* Type and title */}
+      <div className="flex items-start gap-3 mb-2">
+        <div className={`text-2xl flex-shrink-0 ${isCompleted ? 'grayscale-0' : ''}`}>
+          {workoutType.icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h4 className="font-semibold text-white text-sm">
+            {session.title || workoutType.name}
+          </h4>
+          <p className={`text-xs ${isCompleted ? 'text-success' : 'text-text-muted'}`}>
+            {workoutType.name}
+          </p>
+        </div>
+        {session.duration_minutes && (
+          <div className="flex items-center gap-1 text-xs text-text-muted">
+            <Clock size={12} />
+            {session.duration_minutes} min
+          </div>
+        )}
+      </div>
+
+      {/* Description */}
+      {session.description && (
+        <p className="text-sm text-text-secondary mt-2 line-clamp-2">
+          {session.description}
+        </p>
+      )}
+
+      {/* Running details */}
+      {session.running && (
+        <div className="flex items-center gap-3 mt-3 text-xs text-text-muted">
+          {session.running.distance && (
+            <span>{session.running.distance} km</span>
+          )}
+          {session.running.avgPace && (
+            <span>{session.running.avgPace} min/km</span>
+          )}
+          {session.running.surface && (
+            <div className="flex items-center gap-1">
+              <MapPin size={12} />
+              <span className="capitalize">{session.running.surface}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Details */}
+      {session.details && (
+        <div className="flex items-center gap-3 mt-3 text-xs text-text-muted">
+          {session.details.distance_km && (
+            <span>{session.details.distance_km} km</span>
+          )}
+          {session.details.intensity && (
+            <span className="capitalize">{session.details.intensity}</span>
+          )}
+          {session.details.location && (
+            <div className="flex items-center gap-1">
+              <MapPin size={12} />
+              <span>{session.details.location}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* RPE */}
+      {session.rpe && (
+        <div className="mt-3 flex items-center gap-2">
+          <span className="text-xs text-text-muted">RPE:</span>
+          <div className="flex gap-0.5">
+            {[...Array(10)].map((_, i) => (
+              <div
+                key={i}
+                className={`w-2 h-2 rounded-full ${
+                  i < session.rpe
+                    ? 'bg-primary'
+                    : 'bg-white/10'
+                }`}
+              />
+            ))}
+          </div>
+          <span className="text-xs font-medium text-white">{session.rpe}/10</span>
+        </div>
+      )}
+
+      {/* Complete button */}
+      {showCompleteButton && onMarkCompleted && !isCompleted && (
+        <button
+          onClick={() => onMarkCompleted(session)}
+          disabled={loading}
+          className="mt-3 w-full btn-primary py-2 text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition-transform"
+        >
+          <CheckCircle size={16} className={loading ? 'animate-spin' : ''} />
+          {loading ? 'Markerer...' : 'Marker som fullført'}
+        </button>
+      )}
+    </div>
+  )
+}

@@ -1,8 +1,8 @@
 import { createContext, useState, useEffect } from 'react'
-import { 
-  signInWithPopup, 
+import {
+  signInWithPopup,
   signOut as firebaseSignOut,
-  onAuthStateChanged 
+  onAuthStateChanged
 } from 'firebase/auth'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { auth, googleProvider, db } from '../config/firebase'
@@ -22,8 +22,8 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Sjekk om brukeren er autorisert
-        if (firebaseUser.email !== ALLOWED_EMAIL) {
+        // Sjekk om brukeren er autorisert (kun hvis ALLOWED_EMAIL er satt)
+        if (ALLOWED_EMAIL && firebaseUser.email !== ALLOWED_EMAIL) {
           await firebaseSignOut(auth)
           setUser(null)
           setUserProfile(null)
@@ -31,7 +31,7 @@ export function AuthProvider({ children }) {
         } else {
           setUser(firebaseUser)
           setError(null)
-          
+
           // Hent eller opprett brukerprofil
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
           if (userDoc.exists()) {
@@ -77,13 +77,13 @@ export function AuthProvider({ children }) {
       setError(null)
       setLoading(true)
       const result = await signInWithPopup(auth, googleProvider)
-      
-      // Sjekk om e-post er tillatt
-      if (result.user.email !== ALLOWED_EMAIL) {
+
+      // Sjekk om e-post er tillatt (kun hvis ALLOWED_EMAIL er satt)
+      if (ALLOWED_EMAIL && result.user.email !== ALLOWED_EMAIL) {
         await firebaseSignOut(auth)
         throw new Error('Ikke autorisert. Kun én bruker har tilgang til denne appen.')
       }
-      
+
       return result.user
     } catch (err) {
       setError(err.message)
@@ -108,7 +108,7 @@ export function AuthProvider({ children }) {
   // Oppdater brukerprofil
   const updateProfile = async (updates) => {
     if (!user) return
-    
+
     try {
       const userRef = doc(db, 'users', user.uid)
       await setDoc(userRef, updates, { merge: true })
