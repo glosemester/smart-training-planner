@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useState, useEffect, useCallback, useMemo } from 'react'
 import {
   collection,
   query,
@@ -47,12 +47,22 @@ export function NutritionProvider({ children }) {
       mealsQuery,
       (snapshot) => {
         console.log('✅ Meals fetched successfully:', snapshot.docs.length, 'meals')
-        const mealData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          date: doc.data().date?.toDate?.() || new Date(doc.data().date)
-        }))
-        setMeals(mealData)
+
+        const newIds = snapshot.docs.map(doc => doc.id).join(',')
+
+        setMeals(prevMeals => {
+          const prevIds = prevMeals.map(m => m.id).join(',')
+          if (prevIds === newIds && prevMeals.length === snapshot.docs.length) {
+            return prevMeals
+          }
+
+          return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            date: doc.data().date?.toDate?.() || new Date(doc.data().date)
+          }))
+        })
+
         setLoading(false)
       },
       (err) => {
@@ -144,7 +154,7 @@ export function NutritionProvider({ children }) {
     })
   }, [meals])
 
-  const value = {
+  const value = useMemo(() => ({
     meals,
     loading,
     error,
@@ -152,7 +162,7 @@ export function NutritionProvider({ children }) {
     updateMeal,
     deleteMeal,
     getMealsForDate
-  }
+  }), [meals, loading, error, addMeal, updateMeal, deleteMeal, getMealsForDate])
 
   return (
     <NutritionContext.Provider value={value}>

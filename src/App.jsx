@@ -18,6 +18,7 @@ const TrainingCalendar = lazy(() => import('./components/calendar/TrainingCalend
 const HealthSync = lazy(() => import('./components/health/HealthSync'))
 const AIChat = lazy(() => import('./components/chat/AIChat'))
 const NutritionTracker = lazy(() => import('./components/nutrition/NutritionTracker'))
+const StravaCallback = lazy(() => import('./components/auth/StravaCallback'))
 
 // Loading fallback component
 function LoadingFallback() {
@@ -52,8 +53,9 @@ function App() {
     <>
       <Suspense fallback={<LoadingFallback />}>
         <Routes>
-          {/* Public route */}
+          {/* Public routes */}
           <Route path="/login" element={<LoginScreen />} />
+          <Route path="/strava-callback" element={<StravaCallback />} />
 
           {/* Protected routes */}
           <Route

@@ -1,92 +1,70 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  darkMode: 'class',
+  darkMode: 'class', // We are enforcing dark mode via CSS variables mostly, but keeping this
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
+    container: {
+      center: true,
+      padding: "2rem",
+      screens: {
+        "2xl": "1400px",
+      },
+    },
     extend: {
       colors: {
-        // Minimalist Backgrounds
         background: {
-          DEFAULT: '#09090b', // Zinc-950
-          secondary: '#18181b', // Zinc-900
-          card: '#18181b', // Same as secondary for now, distinct via border
-          elevated: '#27272a', // Zinc-800
-          // Light mode
-          light: {
-            DEFAULT: '#ffffff',
-            secondary: '#f4f4f5', // Zinc-100
-            card: '#ffffff',
-            elevated: '#ffffff'
-          }
+          DEFAULT: "hsl(var(--bg-main) / <alpha-value>)",
+          surface: "hsl(var(--bg-surface) / <alpha-value>)",
+          elevated: "hsl(var(--bg-elevated) / <alpha-value>)",
         },
-        // Primary Accent - International Orange / Vibrant
         primary: {
-          DEFAULT: '#ea580c', // Orange-600
-          light: '#f97316', // Orange-500
-          dark: '#c2410c', // Orange-700
-          subtle: 'rgba(234, 88, 12, 0.1)'
+          DEFAULT: "hsl(var(--primary) / <alpha-value>)",
+          foreground: "hsl(var(--primary-foreground) / <alpha-value>)",
+          light: "hsl(21 90% 70%)", // Lighter variant for hovers
         },
-        // Secondary/Neutral
-        secondary: {
-          DEFAULT: '#71717a', // Zinc-500
-          light: '#a1a1aa', // Zinc-400
-          dark: '#52525b' // Zinc-600
+        accent: {
+          DEFAULT: "hsl(var(--accent) / <alpha-value>)",
+          foreground: "hsl(var(--accent-foreground) / <alpha-value>)",
         },
-        // Semantic
-        success: '#10b981', // Emerald-500
-        warning: '#f59e0b', // Amber-500
-        error: '#ef4444', // Red-500
-
-        // Activity Colors (Pastel/Muted for minimalism)
-        running: '#ea580c', // Orange match
-        hyrox: '#eab308', // Yellow-500
-        crossfit: '#0ea5e9', // Sky-500
-        strength: '#8b5cf6', // Violet-500
-        rest: '#71717a', // Zinc-500
-
-        // Text
         text: {
-          primary: '#fafafa', // Zinc-50
-          secondary: '#a1a1aa', // Zinc-400
-          muted: '#52525b', // Zinc-600
-          // Light mode
-          light: {
-            primary: '#09090b',
-            secondary: '#52525b',
-            muted: '#a1a1aa'
-          }
-        }
+          primary: "hsl(var(--text-primary) / <alpha-value>)",
+          secondary: "hsl(var(--text-secondary) / <alpha-value>)",
+          muted: "hsl(var(--text-muted) / <alpha-value>)",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--error) / <alpha-value>)",
+          foreground: "hsl(0 0% 100%)",
+        },
+        border: "hsl(var(--border) / <alpha-value>)",
+        input: "hsl(var(--input) / <alpha-value>)",
+        ring: "hsl(var(--ring) / <alpha-value>)",
+      },
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
+        '3xl': '1.5rem',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
-        // We can keep specific headings if needed, but Inter is great for minimal
-        heading: ['Inter', 'system-ui', 'sans-serif'],
-      },
-      boxShadow: {
-        'glow-primary': '0 0 15px rgba(234, 88, 12, 0.5)', // Matches primary #ea580c
-      },
-      borderRadius: {
-        'xl': '12px',
-        '2xl': '16px',
-        '3xl': '24px',
       },
       animation: {
-        'fade-in': 'fadeIn 0.2s ease-out',
-        'slide-up': 'slideUp 0.3s ease-out',
+        'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+        'pulse-subtle': 'pulseSubtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
       },
       keyframes: {
-        fadeIn: {
-          '0%': { opacity: '0' },
-          '100%': { opacity: '1' },
-        },
         slideUp: {
-          '0%': { opacity: '0', transform: 'translateY(10px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
+          '0%': { transform: 'translateY(10px)', opacity: 0 },
+          '100%': { transform: 'translateY(0)', opacity: 1 },
         },
-      },
+        pulseSubtle: {
+          '0%, 100%': { opacity: 1 },
+          '50%': { opacity: 0.8 },
+        }
+      }
     },
   },
   plugins: [],

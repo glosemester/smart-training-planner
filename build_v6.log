@@ -1,0 +1,21 @@
+
+> runcoach@0.1.0 build
+> vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 3 modules transformed.
+[31mx[39m Build failed in 467ms
+[31merror during build:
+[31m[vite:css] [postcss] Unexpected token, expected "," (67:3)[31m
+file: [36mC:/Users/Oyvin/Documents/GitHub/smart-training-planner/src/index.css:undefined:NaN[31m
+    at unexpected (C:\Users\Oyvin\Documents\GitHub\smart-training-planner\node_modules\sucrase\dist\parser\traverser\util.js:99:15)
+    at expect (C:\Users\Oyvin\Documents\GitHub\smart-training-planner\node_modules\sucrase\dist\parser\traverser\util.js:86:5)
+    at parseObj (C:\Users\Oyvin\Documents\GitHub\smart-training-planner\node_modules\sucrase\dist\parser\traverser\expression.js:759:20)
+    at parseExprAtom (C:\Users\Oyvin\Documents\GitHub\smart-training-planner\node_modules\sucrase\dist\parser\traverser\expression.js:553:7)
+    at parseExprSubscripts (C:\Users\Oyvin\Documents\GitHub\smart-training-planner\node_modules\sucrase\dist\parser\traverser\expression.js:276:20)
+    at parseMaybeUnary (C:\Users\Oyvin\Documents\GitHub\smart-training-planner\node_modules\sucrase\dist\parser\traverser\expression.js:257:20)
+    at parseExprOps (C:\Users\Oyvin\Documents\GitHub\smart-training-planner\node_modules\sucrase\dist\parser\traverser\expression.js:185:20)
+    at parseMaybeConditional (C:\Users\Oyvin\Documents\GitHub\smart-training-planner\node_modules\sucrase\dist\parser\traverser\expression.js:157:20)
+    at baseParseMaybeAssign (C:\Users\Oyvin\Documents\GitHub\smart-training-planner\node_modules\sucrase\dist\parser\traverser\expression.js:142:20)
+    at tsParseMaybeAssignWithoutJSX (C:\Users\Oyvin\Documents\GitHub\smart-training-planner\node_modules\sucrase\dist\parser\plugins\typescript.js:1580:45)[39m

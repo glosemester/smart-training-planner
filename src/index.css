@@ -3,139 +3,112 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Color Palette - HSL Values for Theming */
+    
+    /* Backgrounds: Deep Matte Black/Zinc */
+    --bg-main: 240 10% 4%;      /* #09090b - Main App Background (Darkest) */
+    --bg-surface: 240 6% 10%;   /* #18181b - Cards / Sidebar */
+    --bg-elevated: 240 5% 15%;  /* #27272a - Modals / Popovers */
+
+    /* Primary: Electric Orange */
+    /* --primary: 20 90% 60%; */ /* Legacy Ref */
+    --primary: 21 90% 63%;      /* #ea580c is approx 21 90 48, creating a vibrant variable */
+    --primary-foreground: 0 0% 100%;
+
+    /* Accent: Cyan/Blue (Electric) */
+    --accent: 199 89% 48%;      /* #0ea5e9 */
+    --accent-foreground: 0 0% 100%;
+
+    /* Semantic */
+    --success: 142 71% 45%;     /* #10b981 */
+    --warning: 38 92% 50%;      /* #f59e0b */
+    --error: 0 84% 60%;         /* #ef4444 */
+
+    /* Text */
+    --text-primary: 0 0% 98%;     /* #fafafa */
+    --text-secondary: 240 5% 65%; /* #a1a1aa */
+    --text-muted: 240 4% 46%;     /* #71717a */
+
+    /* Activity Types */
+    --color-running: 21 90% 63%;
+    --color-strength: 262 83% 58%;
+    --color-cycling: 199 89% 48%;
+    --color-other: 240 5% 65%;
+
+    /* Borders */
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 21 90% 63%;
+  }
+
+  /* Force Dark Mode Default */
   html {
+    /* Use variables for globals */
+    background-color: hsl(var(--bg-main));
+    color: hsl(var(--text-primary));
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-
-  /* Light mode (default) */
-  body {
-    @apply bg-background-light text-text-light-primary min-h-screen transition-colors duration-200;
-  }
-
-  /* Dark mode */
-  .dark body {
-    @apply bg-background text-text-primary;
-  }
-
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-semibold tracking-tight;
-  }
-
-  *:focus {
-    @apply outline-none;
-  }
-
-  *:focus-visible {
-    @apply ring-2 ring-primary/50 ring-offset-2 ring-offset-background;
-  }
 }
 
 @layer components {
-  /* Minimalist Card - Flat with subtle border */
-  .card {
-    @apply bg-white dark:bg-background-card rounded-2xl p-4 md:p-6
-           border border-gray-100 dark:border-white/5 
-           transition-colors duration-200;
+  /* GLASSMORPHISM UTILITIES */
+  .glass-panel {
+    @apply backdrop-blur-xl border border-white/5 shadow-xl;
+    background: linear-gradient(
+      145deg,
+      rgba(24, 24, 27, 0.6) 0%,
+      rgba(24, 24, 27, 0.3) 100%
+    );
   }
 
-  /* Interactive Card */
-  .card-interactive {
-    @apply card cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5;
+  .glass-card {
+    @apply rounded-3xl p-5 relative overflow-hidden transition-all duration-300;
+    background: linear-gradient(
+      180deg,
+      rgba(39, 39, 42, 0.4) 0%,
+      rgba(39, 39, 42, 0.2) 100%
+    );
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(12px);
   }
 
-  /* Minimalist Button */
-  .btn {
-    @apply px-4 py-3 rounded-xl font-medium text-sm transition-all duration-200
-           active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed
-           flex items-center justify-center gap-2;
+  .glass-card:hover {
+    @apply -translate-y-[2px];
+    border-color: rgba(234, 88, 12, 0.2); /* Primary color hint */
+    box-shadow: 0 8px 30px rgba(0,0,0,0.3);
   }
 
-  .btn-primary {
-    @apply btn bg-primary text-white hover:bg-primary-light;
+  /* NEON TEXT UTILITY */
+  .text-glow {
+    text-shadow: 0 0 10px rgba(234, 88, 12, 0.5);
   }
 
-  .btn-secondary {
-    @apply btn bg-secondary/10 dark:bg-white/10 text-gray-900 dark:text-white 
-           hover:bg-secondary/20 dark:hover:bg-white/20;
-  }
-
-  .btn-ghost {
-    @apply btn bg-transparent text-gray-600 dark:text-text-secondary 
-           hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white;
-  }
-
-  .btn-outline {
-    @apply btn bg-transparent border border-gray-200 dark:border-white/10 
-           text-gray-900 dark:text-white
-           hover:border-gray-300 dark:hover:border-white/20;
-  }
-
-  /* Inputs */
-  .input {
-    @apply w-full px-4 py-3 bg-gray-50 dark:bg-background-secondary/50 rounded-xl
-           border border-transparent focus:border-primary/50
-           text-gray-900 dark:text-text-primary placeholder-gray-400 dark:placeholder-text-muted
-           focus:bg-white dark:focus:bg-background-secondary
-           transition-all duration-200;
-  }
-
-  .input-label {
-    @apply block text-sm font-medium text-gray-700 dark:text-text-secondary mb-1.5;
-  }
-
-  /* Navigation Item */
-  .nav-item {
-    @apply flex flex-col items-center gap-1 p-2 rounded-xl
-           text-gray-500 dark:text-text-muted transition-colors duration-200;
-  }
-
-  .nav-item-active {
-    @apply nav-item text-primary bg-primary/5 dark:bg-primary/10;
+  /* BUTTONS */
+  .btn-new {
+    @apply relative inline-flex items-center justify-center gap-2 px-5 py-3 
+           rounded-full font-semibold text-sm transition-all duration-300
+           active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
   }
   
-  /* Desktop Sidebar Item */
-  .sidebar-item {
-    @apply flex items-center gap-3 px-4 py-3 rounded-xl
-           text-gray-500 dark:text-text-secondary 
-           hover:bg-gray-50 dark:hover:bg-white/5 transition-colors duration-200;
+  .btn-primary-glow {
+    @apply btn-new text-white shadow-lg shadow-primary/20 hover:shadow-primary/40;
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(15 90% 55%) 100%);
   }
 
-  .sidebar-item-active {
-    @apply sidebar-item text-primary bg-primary/5 dark:bg-primary/10 font-medium;
-  }
-
-  /* Stats */
-  .stat-value {
-    @apply text-2xl font-bold text-gray-900 dark:text-text-primary tracking-tight;
-  }
-
-  .stat-label {
-    @apply text-sm text-gray-500 dark:text-text-muted;
-  }
-
-  /* Spinner */
-  .spinner {
-    @apply w-5 h-5 border-2 border-primary/30 border-t-primary 
-           rounded-full animate-spin;
+  .btn-ghost-glow {
+    @apply btn-new bg-white/5 text-text-primary hover:bg-white/10 border border-white/5;
   }
 }
 
 @layer utilities {
-  .safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom, 16px);
+  .text-balance {
+    text-wrap: balance;
   }
   
-  .safe-top {
-    padding-top: env(safe-area-inset-top, 16px);
-  }
-
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
+  .mask-gradient-b {
+    mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
   }
 }

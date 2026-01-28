@@ -103,12 +103,12 @@ Output-format: Returner alltid en strukturert JSON med følgende format for FLER
 
     try {
         const systemPrompt = type === 'adjust'
-            ? "Du er en ekspert på treningsplanlegging. Gi korte, presise analyser og forslag."
+            ? "Du er en ekspert på treningsplanlegging. Gi korte, presise analyser og forslag. SVAR KUN MED JSON."
             : TRAINING_SYSTEM_PROMPT;
 
         const model = genAI.getGenerativeModel({
             model: "gemini-2.5-flash",
-            systemInstruction: systemPrompt + " Du er en JSON-generator. Svar KUN med rå JSON. Ingen tekst før eller etter. Bruk dobbelanførselstegn for alle strenger."
+            systemInstruction: systemPrompt + "\n\nKRITISK REGEL: Du MÅ svare med KUN rå JSON. Start svaret med { og avslutt med }. ALDRI inkluder tekst, forklaringer, markdown eller kommentarer utenfor JSON-objektet."
         });
 
         let prompt;
@@ -391,7 +391,12 @@ exports.generateDailySummary = onCall({
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
         model: "gemini-2.5-flash",
-        systemInstruction: "Du er en JSON-generator. Svar KUN med rå JSON. Ingen tekst, forklaringer eller markdown-formatering. Du er en personlig treningscoach som gir korte, motiverende daglige oppsummeringer. Svar KUN med rå JSON. Ingen tekst før eller etter. Bruk dobbelanførselstegn for alle strenger."
+        systemInstruction: `Du er en personlig treningscoach som gir korte, motiverende daglige oppsummeringer.
+
+KRITISK REGEL: Du MÅ svare med KUN rå JSON. Start svaret med { og avslutt med }. ALDRI inkluder tekst, forklaringer, markdown eller kommentarer utenfor JSON-objektet.
+
+Hvis data mangler eller er tomt, returner:
+{"headline":"Ingen aktiv plan","mood":"neutral","insights":["Du har ikke valgt en treningsplan ennå."],"recommendation":"Opprett en ny plan for å få daglige tips.","readinessScore":10}`
     });
 
     const prompt = buildSummaryPrompt(summaryData);
@@ -407,13 +412,18 @@ exports.generateDailySummary = onCall({
 
         if (start === -1 || end === -1) {
             console.error("Ingen JSON funnet i AI-svar", { raw: text });
-            throw new HttpsError('internal', "AI-en svarte ikke i JSON-format.");
+            // Fallback istedenfor crash
+            return {
+                headline: "Ingen oppsummering tilgjengelig",
+                mood: "neutral",
+                insights: ["Kunne ikke generere AI-svar."],
+                recommendation: "Prøv igjen senere."
+            };
         }
 
         let jsonString = text.substring(start, end + 1);
 
         // 2. TEKNISK RENSING: Fjern ulovlige kontrolltegn og linjeskift inne i tekststrenger
-        // Dette hindrer krasj ved lange treningsbeskrivelser
         jsonString = jsonString
             .replace(/[\u0000-\u001F\u007F-\u009F]/g, "")
             .replace(/\n/g, "\\n")
@@ -428,12 +438,24 @@ exports.generateDailySummary = onCall({
                 return JSON.parse(fallbackClean);
             } catch (e2) {
                 console.error("Kritisk JSON-feil", { raw: text });
-                throw new HttpsError('internal', "AI-formatet var ugyldig. Vennligst prøv igjen.");
+                // Returner fallback JSON
+                return {
+                    headline: "Teknisk feil med oppsummering",
+                    mood: "neutral",
+                    insights: ["AI-responsen var ugyldig.", "Vi jobber med saken."],
+                    recommendation: "Prøv å oppdatere siden."
+                };
             }
         }
     } catch (error) {
-        if (error.code === 'internal') throw error;
-        return formatGeminiError(error);
+        console.error("Generell feil i generateDailySummary:", error);
+        // Aldri crash med 500, returner alltid JSON
+        return {
+            headline: "Tjeneste utilgjengelig",
+            mood: "warning",
+            insights: ["Kunne ikke kontakte AI-tjenesten."],
+            recommendation: "Prøv igjen om litt."
+        };
     }
 });
 
@@ -451,17 +473,232 @@ function buildUserPrompt(userData, chunkInfo) {
     }
 
     let chunkPrompt = "";
+    let weekRange = "";
     if (chunkInfo) {
+        const endWeek = chunkInfo.startWeek + chunkInfo.weeksPerChunk - 1;
+        weekRange = `uke ${chunkInfo.startWeek}-${endWeek}`;
         if (chunkInfo.isFirstChunk) {
-            chunkPrompt = `Lag overordnet strategi og detaljer for uke ${chunkInfo.startWeek}-${chunkInfo.startWeek + chunkInfo.weeksPerChunk - 1}.`;
+            chunkPrompt = `Lag overordnet strategi og detaljer for ${weekRange}.`;
         } else {
-            chunkPrompt = `Lag detaljer for uke ${chunkInfo.startWeek}-${chunkInfo.startWeek + chunkInfo.weeksPerChunk - 1} basert på strategi: ${chunkInfo.overallStrategy}`;
+            chunkPrompt = `Lag detaljer for ${weekRange} basert på strategi: ${chunkInfo.overallStrategy}`;
         }
     }
 
-    return `Generer treningsplan. \n${goalInfo}\n${chunkPrompt}\nBrukerdata: ${JSON.stringify(userData)}`;
+    // Beregn antall uker for JSON-strukturen
+    const weeksToGenerate = chunkInfo ? chunkInfo.weeksPerChunk : (userData.planDuration || 4);
+
+    return `VIKTIG: Svar KUN med JSON. Ingen tekst før eller etter JSON-objektet. Start svaret med { og avslutt med }.
+
+${goalInfo}
+${chunkPrompt}
+
+BRUKERDATA:
+${JSON.stringify(userData, null, 2)}
+
+SVAR MED DENNE EKSAKTE JSON-STRUKTUREN (${weeksToGenerate} uker):
+{
+  "planDuration": ${weeksToGenerate},
+  "goalInfo": "kort oppsummering av mål",
+  "overallStrategy": "overordnet strategi for perioden",
+  "milestones": ["milepæl 1", "milepæl 2"],
+  "weeks": [
+    {
+      "weekNumber": 1,
+      "weekStartDate": "2025-01-27",
+      "phase": "base|build|peak|taper",
+      "focus": "ukens fokus",
+      "totalLoad": {
+        "running_km": 30,
+        "strength_sessions": 2,
+        "estimated_hours": 6
+      },
+      "sessions": [
+        {
+          "day": "monday",
+          "type": "easy_run|tempo|interval|long_run|hyrox|crossfit|strength|rest|recovery",
+          "title": "Tittel på økten",
+          "description": "Kort beskrivelse",
+          "purpose": "Hensikt med økten",
+          "rpe_target": "RPE 3-4",
+          "coach_tip": "Ett tips",
+          "duration_minutes": 45,
+          "details": {
+            "distance_km": 8,
+            "pace_zone": "Z2"
+          }
+        }
+      ],
+      "weeklyTips": ["tips 1"]
+    }
+  ]
+}
+
+HUSK: Start svaret med { og avslutt med }. Ingen annen tekst.`;
 }
 
 function buildSummaryPrompt(data) {
-    return `Analyser og oppsummer: ${JSON.stringify(data)}`;
+    return `Basert på følgende treningsdata, generer en daglig oppsummering.
+
+DATA:
+${JSON.stringify(data, null, 2)}
+
+SVAR BARE MED DENNE JSON-STRUKTUREN (ingen annen tekst):
+{
+  "headline": "Kort motiverende overskrift (maks 8 ord)",
+  "mood": "positive|neutral|warning",
+  "insights": ["Innsikt 1", "Innsikt 2"],
+  "recommendation": "Ett konkret tips for dagen",
+  "readinessScore": 7
+}`;
 }
+
+// ==========================================
+// 5. STRAVA TOKEN EXCHANGE
+// ==========================================
+exports.exchangeStravaToken = onCall({
+    timeoutSeconds: 30,
+    secrets: ["STRAVA_CLIENT_SECRET"],
+    cors: true
+}, async (request) => {
+    const { code, userId } = request.data;
+
+    if (!code) throw new HttpsError('invalid-argument', 'Authorization code is required');
+    if (!userId) throw new HttpsError('invalid-argument', 'User ID is required');
+
+    const clientId = process.env.STRAVA_CLIENT_ID || '198335';
+    const clientSecret = process.env.STRAVA_CLIENT_SECRET;
+
+    if (!clientSecret) {
+        console.error('STRAVA_CLIENT_SECRET not configured');
+        throw new HttpsError('failed-precondition', 'Strava client secret not configured');
+    }
+
+    console.log('Exchanging Strava code for token...', { userId, codePrefix: code.substring(0, 10) });
+
+    try {
+        // Exchange code for token
+        const response = await fetch('https://www.strava.com/oauth/token', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                client_id: clientId,
+                client_secret: clientSecret,
+                code: code,
+                grant_type: 'authorization_code'
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Strava token exchange failed:', response.status, errorText);
+            throw new HttpsError('internal', `Strava error: ${response.status}`);
+        }
+
+        const tokenData = await response.json();
+        console.log('Strava token received for athlete:', tokenData.athlete?.id);
+
+        // Store tokens in Firestore
+        const db = admin.firestore();
+        await db.collection('users').doc(userId).set({
+            stravaTokens: {
+                access_token: tokenData.access_token,
+                refresh_token: tokenData.refresh_token,
+                expires_at: tokenData.expires_at,
+                athlete_id: tokenData.athlete?.id
+            },
+            stravaConnectedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        console.log('Strava tokens stored for user:', userId);
+
+        return {
+            success: true,
+            athlete: tokenData.athlete
+        };
+
+    } catch (error) {
+        if (error.code) throw error; // Re-throw HttpsError
+        console.error('Strava token exchange error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to exchange Strava token');
+    }
+});
+
+// ==========================================
+// 6. STRAVA TOKEN REFRESH
+// ==========================================
+exports.refreshStravaToken = onCall({
+    timeoutSeconds: 30,
+    secrets: ["STRAVA_CLIENT_SECRET"],
+    cors: true
+}, async (request) => {
+    const { userId } = request.data;
+
+    if (!userId) throw new HttpsError('invalid-argument', 'User ID is required');
+
+    const clientId = process.env.STRAVA_CLIENT_ID || '198335';
+    const clientSecret = process.env.STRAVA_CLIENT_SECRET;
+
+    if (!clientSecret) {
+        throw new HttpsError('failed-precondition', 'Strava client secret not configured');
+    }
+
+    try {
+        // Get current refresh token from Firestore
+        const db = admin.firestore();
+        const userDoc = await db.collection('users').doc(userId).get();
+
+        if (!userDoc.exists) {
+            throw new HttpsError('not-found', 'User not found');
+        }
+
+        const userData = userDoc.data();
+        const refreshToken = userData.stravaTokens?.refresh_token;
+
+        if (!refreshToken) {
+            throw new HttpsError('failed-precondition', 'No Strava refresh token found');
+        }
+
+        // Refresh the token
+        const response = await fetch('https://www.strava.com/oauth/token', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                client_id: clientId,
+                client_secret: clientSecret,
+                refresh_token: refreshToken,
+                grant_type: 'refresh_token'
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Strava token refresh failed:', response.status, errorText);
+            throw new HttpsError('internal', `Strava refresh error: ${response.status}`);
+        }
+
+        const tokenData = await response.json();
+
+        // Update tokens in Firestore
+        await db.collection('users').doc(userId).update({
+            'stravaTokens.access_token': tokenData.access_token,
+            'stravaTokens.refresh_token': tokenData.refresh_token,
+            'stravaTokens.expires_at': tokenData.expires_at
+        });
+
+        console.log('Strava tokens refreshed for user:', userId);
+
+        return {
+            access_token: tokenData.access_token,
+            expires_at: tokenData.expires_at
+        };
+
+    } catch (error) {
+        if (error.code) throw error;
+        console.error('Strava token refresh error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to refresh Strava token');
+    }
+});

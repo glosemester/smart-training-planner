@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import {
     Home,
     Calendar,
@@ -31,14 +31,14 @@ export default function Sidebar() {
     const isDark = theme === 'dark'
 
     return (
-        <aside className="hidden lg:flex flex-col w-64 h-screen fixed left-0 top-0 border-r border-gray-100 dark:border-white/5 bg-white dark:bg-background-secondary/30 backdrop-blur-xl">
+        <aside className="hidden lg:flex flex-col w-64 h-screen fixed left-0 top-0 border-r border-white/5 bg-background-surface/80 backdrop-blur-xl z-50">
             {/* Logo */}
             <div className="p-6">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-light flex items-center justify-center shadow-lg shadow-primary/20">
                         <span className="text-white font-bold text-lg">RC</span>
                     </div>
-                    <h1 className="font-heading font-bold text-xl text-gray-900 dark:text-white tracking-tight">
+                    <h1 className="font-heading font-bold text-xl text-text-primary tracking-tight">
                         RunCoach
                     </h1>
                 </div>
@@ -53,13 +53,14 @@ export default function Sidebar() {
                         className={({ isActive }) =>
                             `flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${isActive
                                 ? 'bg-primary/10 text-primary font-medium'
-                                : 'text-gray-500 dark:text-text-muted hover:bg-gray-50 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'
+                                : 'text-text-secondary hover:bg-white/5 hover:text-text-primary'
                             }`
                         }
                     >
                         <item.icon
                             size={20}
-                            className="transition-transform duration-200 group-hover:scale-110"
+                            className={`transition-transform duration-200 group-hover:scale-110 ${({ isActive }) => isActive ? 'text-primary' : 'text-current'
+                                }`}
                         />
                         <span>{item.label}</span>
                     </NavLink>
@@ -67,10 +68,10 @@ export default function Sidebar() {
             </nav>
 
             {/* Footer Actions */}
-            <div className="p-4 border-t border-gray-100 dark:border-white/5 space-y-2">
+            <div className="p-4 border-t border-white/5 space-y-2">
                 <button
                     onClick={toggleTheme}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 dark:text-text-muted hover:bg-gray-50 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white transition-all duration-200"
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-text-secondary hover:bg-white/5 hover:text-text-primary transition-all duration-200"
                 >
                     {isDark ? <Sun size={20} /> : <Moon size={20} />}
                     <span>{isDark ? 'Lys modus' : 'Mørk modus'}</span>
@@ -78,7 +79,7 @@ export default function Sidebar() {
 
                 <button
                     onClick={signOut}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 dark:text-text-muted hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-500 transition-all duration-200"
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-text-secondary hover:bg-destructive/10 hover:text-destructive transition-all duration-200"
                 >
                     <LogOut size={20} />
                     <span>Logg ut</span>
