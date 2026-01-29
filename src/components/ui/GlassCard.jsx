@@ -5,8 +5,7 @@ const GlassCard = ({ children, className = '', hoverEffect = false, ...props }) 
         <div
             className={`
         glass-card
-        bg-background-surface/40 
-        ${hoverEffect ? 'hover:bg-background-surface/60 cursor-pointer' : ''}
+        ${hoverEffect ? 'hover:scale-[1.02] cursor-pointer' : ''}
         ${className}
       `}
             {...props}

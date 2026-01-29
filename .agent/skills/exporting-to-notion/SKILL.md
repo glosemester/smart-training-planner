@@ -13,6 +13,7 @@ description: Exports artifacts, implementation plans, notes, and documentation t
 ## Workflow
 1.  **Identify Content**: Determine what needs to be exported (an existing file, an artifact, or text to be generated).
 2.  **Find Destination**:
+    - **DEFAULT PARENT PAGE**: `2f61e9e4-22db-80a8-93f9-cc46578323c8` (Fra Antigravity). Use this unless otherwise specified.
     - Ask the user which page to put it under if not specified.
     - Use `mcp_notion-mcp-server_API-post-search` to find the Parent Page ID.
     - As specified by user, ensure generated content is in **Norwegian** unless otherwise requested.
@@ -103,50 +104,106 @@ If exporting a large file (like `implementation_plan.md`):
 ## Resources
 - [Notion Block Reference](https://developers.notion.com/reference/block)
 
-### 5. Advanced: Custom Script Strategy (Node.js)
-If you encounter `invalid_json` (400) errors or issues with UTF-8 characters (e.g., Norwegian `æ`, `ø`, `å`), standard API calls might fail due to incorrect `Content-Length` calculation.
-Use a custom Node.js script (`.cjs`) to handle this.
+### 5. Advanced: Custom Script Strategy (The "Run Manual" Fallback)
+If you encounter `invalid_json` (400) errors, issues with UTF-8 characters (Norwegian `æ`, `ø`, `å`), or if the MCP tools fail silently:
+**Create and run a standalone Node.js script.**
 
-**Crucial Logic:**
-Use `Buffer.byteLength(data)` instead of `data.length`.
+#### Critical Requirements:
+1.  **File Extension**: Use `.cjs` (CommonJS) if the project uses ESM (type: "module" in package.json), so `require` works reliably.
+2.  **Content-Length**: You MUST calculate `Buffer.byteLength(data)` for the `Content-Length` header. Standard `.length` is wrong for multi-byte characters (emoji, formatting, UTF-8).
+3.  **Environment**: Ensure `https` and `fs` are available (standard Node).
 
-**Template (`scripts/exportToNotion.cjs`):**
+#### Robust Script Template (`export_notion_manual.cjs`)
+
 ```javascript
 const https = require('https');
 const fs = require('fs');
+const path = require('path');
 
-const NOTION_KEY = 'YOUR_KEY';
-const PARENT_PAGE_ID = 'YOUR_PARENT_ID';
-const FILE_PATH = 'path/to/file.md';
+// --- CONFIGURATION ---
+// Get these from user or environment. DO NOT COMMIT KEYS if possible.
+const NOTION_KEY = process.env.NOTION_KEY || 'YOUR_KEY_HERE'; 
+const PARENT_PAGE_ID = 'YOUR_PARENT_PAGE_ID';
+const FILE_PATH = path.join(__dirname, 'your_content_file.md');
 
-const markdown = fs.readFileSync(FILE_PATH, 'utf8');
-// ... parsing logic to blocks ...
-const blocks = parseMarkdownToBlocks(markdown);
+// --- HELPER: PARSER (Simplified) ---
+function parseMarkdownToBlocks(markdown) {
+    const lines = markdown.split('\n');
+    const blocks = [];
+    lines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        
+        // Add logic to map # -> heading_1, - -> bulleted_list_item, etc.
+        // Defaulting to paragraph for safety:
+        blocks.push({
+            object: "block",
+            type: "paragraph",
+            paragraph: {
+                rich_text: [{ type: "text", text: { content: trimmed } }]
+            }
+        });
+    });
+    return blocks.slice(0, 90); // Safety limit (max 100)
+}
 
-const data = JSON.stringify({
-  parent: { page_id: PARENT_PAGE_ID },
-  properties: { title: [{ text: { content: 'Page Title' } }] },
-  children: blocks
-});
+// --- MAIN ---
+try {
+    const markdown = fs.readFileSync(FILE_PATH, 'utf8');
+    const blocks = parseMarkdownToBlocks(markdown);
+    
+    // Create the Payload
+    const payload = JSON.stringify({
+        parent: { page_id: PARENT_PAGE_ID },
+        properties: {
+            title: [ { text: { content: "Page Title" } } ]
+        },
+        children: blocks
+    });
 
-const options = {
-  hostname: 'api.notion.com',
-  path: '/v1/pages',
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${NOTION_KEY}`,
-    'Content-Type': 'application/json',
-    'Notion-Version': '2022-06-28',
-    'Content-Length': Buffer.byteLength(data) // VITAL FOR UTF-8
-  }
-};
+    const options = {
+        hostname: 'api.notion.com',
+        path: '/v1/pages',
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${NOTION_KEY}`,
+            'Content-Type': 'application/json',
+            'Notion-Version': '2022-06-28',
+            'Content-Length': Buffer.byteLength(payload) // <--- CRITICAL
+        }
+    };
 
-const req = https.request(options, (res) => {
-    // Handle response
-});
-req.write(data);
-req.end();
+    const req = https.request(options, (res) => {
+        let responseBody = '';
+        res.on('data', (chunk) => responseBody += chunk);
+        res.on('end', () => {
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+                const json = JSON.parse(responseBody);
+                console.log('SUCCESS: Page created!', json.url);
+            } else {
+                console.error(`ERROR ${res.statusCode}:`, responseBody);
+                process.exit(1);
+            }
+        });
+    });
+
+    req.on('error', (e) => {
+        console.error('Request Error:', e);
+        process.exit(1);
+    });
+
+    req.write(payload);
+    req.end();
+
+} catch (err) {
+    console.error('Script Failed:', err);
+}
 ```
+
+#### Troubleshooting Authorization
+- If you get 404 (Not Found) or 401 (Unauthorized):
+    - Verify the Integration Token starts with `native_` or `secret_`.
+    - **IMPORTANT**: Share the target Parent Page with the Integration (Add Connection > Your Integration Name) in the Notion UI. The API cannot see pages it hasn't been explicitly added to.
 
 ---
 

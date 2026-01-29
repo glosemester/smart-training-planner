@@ -62,11 +62,11 @@ export function TrainingProvider({ children }) {
       }
     )
 
-    // Lytt til plans (siste 12 uker)
+    // Lytt til plans (siste 100 uker - støtter lange planer)
     const plansQuery = query(
       collection(db, 'users', user.uid, 'plans'),
       orderBy('weekStart', 'desc'),
-      limit(12)
+      limit(100)
     )
 
     const unsubscribePlans = onSnapshot(
@@ -95,6 +95,18 @@ export function TrainingProvider({ children }) {
         // 1. Prøv å finne en plan som er aktiv IDAG
         let current = planData.find(plan => isDateInWeek(today, plan.weekStart))
 
+        // DEBUG: Log plan selection
+        console.debug('[TrainingContext] Plan selection:', {
+          today: today.toISOString(),
+          totalPlans: planData.length,
+          allWeekStarts: planData.slice(0, 5).map(p => ({
+            weekNumber: p.weekNumber,
+            weekStart: p.weekStart?.toISOString?.() || p.weekStart,
+            isCurrentWeek: isDateInWeek(today, p.weekStart)
+          })),
+          foundActiveToday: !!current
+        })
+
         // 2. Hvis ingen aktiv plan, finn nærmeste FREMTIDIGE plan
         // Dette løser problemet med at man lager en plan for neste uke og den forsvinner
         if (!current) {
@@ -107,7 +119,7 @@ export function TrainingProvider({ children }) {
             .sort((a, b) => new Date(a.weekStart) - new Date(b.weekStart))
 
           if (futurePlans.length > 0) {
-            console.log('Ingen aktiv plan, valgte nærmeste fremtidige:', futurePlans[0])
+            console.debug('[TrainingContext] Fallback til fremtidig plan:', futurePlans[0].weekNumber)
             current = futurePlans[0]
           }
         }
@@ -115,6 +127,7 @@ export function TrainingProvider({ children }) {
         // 3. Fallback: Hvis vi fortsatt ikke har en plan, men har data, vis den aller nyeste (siste utvei)
         if (!current && planData.length > 0) {
           // planData er hentet med orderBy weekStart desc
+          console.debug('[TrainingContext] Siste fallback til nyeste plan:', planData[0].weekNumber)
           current = planData[0]
         }
 
@@ -268,23 +281,33 @@ export function TrainingProvider({ children }) {
   }, [user, plans])
 
   // Lagre flere uker samtidig (batch/parallelt)
+  // VIKTIG: Sletter alle eksisterende planer før nye lagres
   const saveMultipleWeeks = useCallback(async (weeksArray) => {
     if (!user) throw new Error('Ikke innlogget')
 
     try {
-      // Kjør alle lagringer parallelt for hastighet
+      // 1. Slett alle eksisterende planer først
+      if (plans.length > 0) {
+        console.log(`[TrainingContext] Sletter ${plans.length} eksisterende planer før ny plan lagres...`)
+        const deletePromises = plans.map(plan =>
+          deleteDoc(doc(db, 'users', user.uid, 'plans', plan.id))
+        )
+        await Promise.all(deletePromises)
+        console.log('[TrainingContext] Gamle planer slettet.')
+      }
+
+      // 2. Lagre alle nye uker parallelt
       const promises = weeksArray.map(week => savePlan(week))
       await Promise.all(promises)
+      console.log(`[TrainingContext] ${weeksArray.length} nye uker lagret.`)
 
-      // Vi stoler på at onSnapshot oppdaterer staten, men vi kan også gjøre en
-      // manuell oppdatering eller re-fetch om nødvendig.
-      // Siden savePlan oppdaterer Firestore, vil onSnapshot lytteren trigge.
+      // onSnapshot vil automatisk oppdatere plans-staten
     } catch (err) {
       console.error('saveMultipleWeeks failed:', err)
       setError(err.message)
       throw err
     }
-  }, [user, savePlan])
+  }, [user, plans, savePlan])
 
   // Oppdater treningsplan
   const updatePlan = useCallback(async (planId, updates) => {
@@ -366,6 +389,25 @@ export function TrainingProvider({ children }) {
     }
   }, [user, plans, updatePlan])
 
+  // Slett ALLE planer (for opprydding)
+  const deleteAllPlans = useCallback(async () => {
+    if (!user) throw new Error('Ikke innlogget')
+    if (plans.length === 0) return
+
+    try {
+      console.log(`[TrainingContext] Sletter ${plans.length} planer...`)
+      const deletePromises = plans.map(plan =>
+        deleteDoc(doc(db, 'users', user.uid, 'plans', plan.id))
+      )
+      await Promise.all(deletePromises)
+      console.log('[TrainingContext] Alle planer slettet.')
+    } catch (err) {
+      console.error('deleteAllPlans failed:', err)
+      setError(err.message)
+      throw err
+    }
+  }, [user, plans])
+
   // Hent statistikk for periode
   const getStats = useCallback((days = 28) => {
     const cutoffDate = new Date()
@@ -415,6 +457,7 @@ export function TrainingProvider({ children }) {
     workouts,
     plans,
     currentPlan,
+    setCurrentPlan, // Allow week navigation
     loading,
     error,
     addWorkout,
@@ -426,6 +469,7 @@ export function TrainingProvider({ children }) {
     addPlanSession,
     saveMultipleWeeks,
     deletePlanSession,
+    deleteAllPlans, // Manual cleanup
     getStats
   }
 

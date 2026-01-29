@@ -125,8 +125,86 @@ export async function getRecentActivities(userId) {
     });
 }
 
+/**
+ * Map Strava activity type to app session type
+ */
+function mapStravaTypeToAppType(stravaType) {
+    const typeMap = {
+        'Run': 'running',
+        'Workout': 'hyrox',
+        'WeightTraining': 'strength',
+        'Crossfit': 'crossfit',
+        'HIIT': 'hiit',
+        'Walk': 'walk',
+        'Hike': 'hike'
+    }
+    return typeMap[stravaType] || 'other'
+}
+
+/**
+ * Format pace from seconds and distance to "mm:ss" format
+ */
+function formatPaceFromData(movingTime, distance) {
+    if (!movingTime || !distance || distance === 0) return null
+    const paceSecondsPerKm = movingTime / (distance / 1000)
+    const minutes = Math.floor(paceSecondsPerKm / 60)
+    const seconds = Math.round(paceSecondsPerKm % 60)
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
+
+/**
+ * Finn en matchende Strava-aktivitet for en planlagt økt
+ * Brukes til å auto-fylle puls/distanse/tempo ved fullføring
+ */
+export async function getMatchingStravaActivity(userId, sessionDate, sessionType) {
+    try {
+        const activities = await getRecentActivities(userId)
+
+        // Finn aktivitet som matcher dato og type (±1 dag)
+        const targetDate = new Date(sessionDate)
+
+        const matchingActivity = activities.find(a => {
+            const actDate = new Date(a.start_date)
+            const dayDiff = Math.abs((actDate - targetDate) / (24 * 60 * 60 * 1000))
+
+            // Må være innen 1 dag
+            if (dayDiff > 1) return false
+
+            // Sjekk type-match (løping matcher alle løpetyper)
+            const appType = mapStravaTypeToAppType(a.type)
+            const sessionIsRunning = ['easy_run', 'tempo', 'interval', 'long_run', 'running'].includes(sessionType)
+            const activityIsRunning = a.type === 'Run'
+
+            return (sessionIsRunning && activityIsRunning) || appType === sessionType
+        })
+
+        if (matchingActivity) {
+            console.log('✅ Found matching Strava activity:', matchingActivity.id)
+            return {
+                stravaId: matchingActivity.id,
+                distance: matchingActivity.distance / 1000, // km
+                duration: Math.round(matchingActivity.moving_time / 60), // min
+                avgHR: matchingActivity.average_heartrate || null,
+                maxHR: matchingActivity.max_heartrate || null,
+                avgPace: formatPaceFromData(matchingActivity.moving_time, matchingActivity.distance),
+                calories: matchingActivity.kilojoules ? Math.round(matchingActivity.kilojoules * 0.239) : null,
+                elevationGain: matchingActivity.total_elevation_gain || null,
+                avgSpeed: matchingActivity.average_speed ? (matchingActivity.average_speed * 3.6).toFixed(1) : null, // m/s to km/h
+                type: matchingActivity.type
+            }
+        }
+
+        console.log('ℹ️ No matching Strava activity found for', sessionDate, sessionType)
+        return null
+    } catch (error) {
+        console.error('❌ Error finding matching Strava activity:', error)
+        return null
+    }
+}
+
 export default {
     connectToStrava,
     handleStravaCallback,
-    getRecentActivities
+    getRecentActivities,
+    getMatchingStravaActivity
 }

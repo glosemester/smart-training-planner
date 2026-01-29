@@ -85,90 +85,64 @@ function buildExerciseHistory(workouts) {
 export function buildUserContext({ workouts = [], currentPlan = null, plans = [], stats = null, goals = null }) {
   const context = {}
 
-  // Add all workouts (for exercise history queries)
+  // 1. OPTIMALISERT TRENINGSHISTORIKK
+  // Vi sender kun de siste 50 øktene for å spare tokens, men beholder total statistikk hvis mulig
   if (workouts && workouts.length > 0) {
-    context.allWorkouts = workouts.map(w => ({
+    // Sortert nyeste først
+    const sortedWorkouts = [...workouts].sort((a, b) => new Date(b.date) - new Date(a.date))
+
+    context.recentWorkouts = sortedWorkouts.slice(0, 50).map(w => ({
       id: w.id,
       date: w.date,
       type: w.type,
       title: w.title,
       duration: w.duration,
-      running: w.running,
-      strength: w.strength, // Include exercises with weights
       rpe: w.rpe,
-      notes: w.notes
+      // Forenkle styrkedata: Send kun antall øvelser, ikke hver repetisjon
+      strengthSummary: w.strength?.exercises ? `${w.strength.exercises.length} øvelser` : null,
+      notes: w.notes ? w.notes.substring(0, 100) : null // Kutt lange notater
     }))
 
-    // Also provide recent summary (last 10)
-    context.recentWorkouts = workouts.slice(0, 10).map(w => ({
-      date: w.date,
-      type: w.type,
-      title: w.title,
-      duration: w.duration
-    }))
-
-    // Build exercise history for easy querying
-    context.exerciseHistory = buildExerciseHistory(workouts)
+    // Bygg en lettere versjon av exercise history (kun nyeste perser eller siste løft)
+    // context.exerciseHistory = buildSimplifiedExerciseHistory(sortedWorkouts) 
+    // ^ Deaktivert midlertidig for å spare enda mer plass, AI-en bruker den sjelden
   }
 
-  // Add current plan with full session details for modifications
+  // 2. NÅVÆRENDE PLAN MED FORENKLET STRUKTUR
   if (currentPlan) {
     context.currentPlan = {
       id: currentPlan.id,
       focus: currentPlan.focus,
       weekNumber: currentPlan.weekNumber,
       weekStart: currentPlan.weekStart,
-      totalLoad: currentPlan.totalLoad,
       sessions: currentPlan.sessions?.map(s => ({
         id: s.id,
         day: s.day,
         type: s.type,
         title: s.title,
+        duration: s.duration_minutes,
         description: s.description,
-        duration_minutes: s.duration_minutes,
-        details: s.details,
         status: s.status
       }))
     }
   }
 
-  // Add all plans for comprehensive view
+  // 3.KUN AKTIVE ELLER FREMTIDIGE PLANER
+  // Vi trenger ikke sende historikk på gamle planer, det ligger i workouts
   if (plans && plans.length > 0) {
-    context.allPlans = plans.map(p => ({
-      id: p.id,
-      focus: p.focus,
-      weekNumber: p.weekNumber,
-      weekStart: p.weekStart,
-      phase: p.phase,
-      totalLoad: p.totalLoad,
-      sessions: p.sessions?.map(s => ({
-        id: s.id,
-        day: s.day,
-        type: s.type,
-        title: s.title,
-        status: s.status, // 'planned' or 'completed'
-        duration_minutes: s.duration_minutes,
-        details: s.details
+    const today = new Date()
+    context.upcomingPlans = plans
+      .filter(p => new Date(p.weekStart) >= today)
+      .slice(0, 4) // Max 4 uker frem i tid
+      .map(p => ({
+        weekNumber: p.weekNumber,
+        focus: p.focus
       }))
-    }))
-
-    // Generate comprehensive adherence analysis
-    const adherenceAnalysis = generateAdherenceSummary(plans, workouts)
-    context.planoppfølging = adherenceAnalysis
-
-    // Also add simplified version for backward compatibility
-    context.planAdherence = adherenceAnalysis.overall
   }
 
-  // Add stats
-  if (stats) {
-    context.stats = stats
-  }
-
-  // Add goals
-  if (goals) {
-    context.goals = goals
-  }
+  // 4. STATISTIKK OG MÅL (Viktigst!)
+  if (stats) context.stats = stats
+  if (goals) context.goals = goals
 
   return Object.keys(context).length > 0 ? context : null
 }

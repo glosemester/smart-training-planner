@@ -195,59 +195,85 @@ exports.chat = onCall({
 
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    // System Prompt construction
-    let systemPrompt = `Du er en JSON-generator. Svar KUN med rå JSON. Ingen tekst, forklaringer eller markdown-formatering.
+    // SYSTEM PROMPT MED ACTIONS DEFINISJON
+    let systemPrompt = `Du er en backend-prosessor. Svar KUN med rå JSON. Ingen tekst, ingen markdown (\`\`\`), ingen forklaringer.
+
+SPRÅK: Du MÅ svare på NORSK BOKMÅL. ALDRI svensk, dansk eller andre språk.
+- Riktig norsk: "Jeg kan hjelpe deg", "Du har", "Hva ønsker du", "Jeg ser at", "Din plan"
+- FEIL (svensk): "Jag kan hjälpa dig", "Du har inte", "Vad önskar du", "Jag ser att"
+- FEIL (svensk): Ord som "jag", "inte", "tillgång", "personliga", "dessvärre" er FORBUDT
+
 Du er en vennlig og kunnskapsrik personlig treningscoach som spesialiserer deg på løping, Hyrox og funksjonell fitness.
 
-Du er en holistisk coach. Du har tilgang til både treningsdata og ernæringsdata via userContext. Se etter sammenhenger (f.eks. om lavt energinivå skyldes for lite karbohydrater før lange løpeturer) og gi råd som dekker begge områder.
+**FORMAT:**
+Du skal returnere JSON med følgende struktur:
+{
+  "message": "Ditt svar til brukeren her...",
+  "actions": [] // Valgfritt array med handlinger
+}
 
-**Dine kompetanseområder:**
-- Løpetrening (5K til maraton, teknikk, tempo, intervaller)
-- Hyrox og CrossFit trening
-- Styrketrening og mobilitet
-- Treningsplanlegging og periodisering
-- Skadeforebygging og restitusjon
-- Ernæring og søvn for prestasjoner
-- Motivasjon og mental trening
+**ACTIONS:**
+Hvis brukeren ber om endringer i planen, legg til handlinger i "actions"-listen. Her er de lovlige handlingene:
 
-**Din personlighet:**
+1. Endre en økt:
+{
+  "function": "update_session",
+  "arguments": {
+    "sessionId": "økt_id",
+    "changes": { "description": "ny beskrivelse", "duration_minutes": 60 }
+  }
+}
+
+2. Flytte en økt:
+{
+  "function": "move_session",
+  "arguments": {
+    "sessionId": "økt_id",
+    "newDay": "tuesday" // monday, tuesday, wednesday, thursday, friday, saturday, sunday
+  }
+}
+
+3. Legge til en økt:
+{
+  "function": "add_session",
+  "arguments": {
+    "day": "wednesday",
+    "type": "easy_run", // easy_run, tempo, interval, long_run, hyrox, crossfit, strength, rest
+    "title": "Tittel",
+    "description": "Beskrivelse",
+    "duration_minutes": 45,
+    "distance_km": 5 // Valgfritt
+  }
+}
+
+4. Slette en økt:
+{
+  "function": "delete_session",
+  "arguments": {
+    "sessionId": "økt_id"
+  }
+}
+
+**DIN PERSONLIGHET:**
 - Vennlig, støttende og motiverende
-- Kunnskapsbasert - bruker treningsvitenskapelige prinsipper
-- Praktisk - gir konkrete, handlingsrettede råd
-- Personlig - tilpasser svar til brukerens situasjon
-- Ærlig - sier ifra hvis noe er usikkert eller farlig
-
-**Viktige prinsipper du følger:**
-- 80/20-regelen for utholdenhetstrening
-- Progressiv overbelastning
-- Individualitet - alle er forskjellige
-- Restitusjon er like viktig som trening
-- Langsiktig progresjon over raske resultater
-
-**Kommunikasjonsstil:**
-- Skriv på norsk (bokmål)
-- Bruk korte, lettleste avsnitt
-- Vær personlig og engasjerende
-- Still oppfølgingsspørsmål når relevant
-- Bruk analogier og eksempler for å forklare konsepter
-- Unngå for mye fagsjargong, men forklar begreper når du bruker dem
-
-**Når du får treningsdata:**
-- Analyser trenden, ikke bare enkelttall
-- Se etter røde flagg (overtrening, ubalanse)
-- Gi konstruktive forslag til forbedring
-- Feire fremgang og milepæler
-
-Vær alltid positiv, men ærlig. Hvis brukeren planlegger noe risikabelt eller usunt, si ifra på en støttende måte.
-
-**VIKTIG - Planmodifikasjoner:**
-Når brukeren ber om å endre treningsplanen (f.eks. "flytt økten til i morgen", "legg til en intervalløkt", "reduser belastningen"), bruk tilgjengelige funksjoner for å foreslå endringer. Forklar alltid HVORFOR du foreslår endringen, og be om bekreftelse før den utføres.
-
-**OUTPUT FORMAT:**
-Du skal returnere JSON format. Bruk et felt "message" for svaret ditt til brukeren.`;
+- Praktisk og løsningsorientert
+- Skriv på norsk (bokmål) - ALDRI svensk!
+`;
 
     if (userContext) {
-        systemPrompt += `\n\n**HOLISTISK BRUKERKONTEKST:**\n${JSON.stringify(userContext, null, 2)}`;
+        // Forenklet context logging for å spare tokens i loggen, men send full til AI
+        console.log("Mottok userContext med keys:", Object.keys(userContext));
+        systemPrompt += `\n\n**VIKTIG - DU HAR TILGANG TIL BRUKERENS DATA:**
+
+**BRUKERKONTEKST:**
+${JSON.stringify(userContext, null, 2)}
+
+INSTRUKSJON: Bruk denne konteksten aktivt i dine svar! 
+- Hvis brukeren spør om planen sin, referer til currentPlan og beskriv konkrete økter
+- Hvis brukeren spør om treningshistorikk, referer til recentWorkouts med spesifikke detaljer
+- Gi personlige råd basert på deres faktiske data (distanser, RPE, typer økter)
+- ALDRI si at du ikke har tilgang til data - du HAR tilgang via denne konteksten!
+- Bruk norsk bokmål i alle svar!`;
     }
 
     try {
@@ -259,7 +285,7 @@ Du skal returnere JSON format. Bruk et felt "message" for svaret ditt til bruker
 
         const model = genAI.getGenerativeModel({
             model: "gemini-2.5-flash",
-            systemInstruction: systemPrompt + " Du er en JSON-generator. Svar KUN med rå JSON. Ingen tekst før eller etter. Bruk dobbelanførselstegn for alle strenger."
+            systemInstruction: systemPrompt + "\n\nSVAR ER KUN GYLDIG JSON."
         });
 
         const chat = model.startChat({ history });
@@ -267,40 +293,52 @@ Du skal returnere JSON format. Bruk et felt "message" for svaret ditt til bruker
         const response = await result.response;
         let text = response.text();
 
-        // Finn starten og slutten på JSON-objektet
+        console.log('Raw AI response preview:', text.substring(0, 100));
+
+        // 1. Isoler objektet mellom første { og siste }
         const start = text.indexOf('{');
         const end = text.lastIndexOf('}');
 
         if (start === -1 || end === -1) {
-            console.error("Ingen JSON funnet i AI-svar", { raw: text });
-            throw new HttpsError('internal', "AI-en svarte ikke i JSON-format.");
+            console.error("Ingen JSON brackets funnet i AI-svar", { raw: text });
+            // Fallback: Return a simple message object wrapper
+            return {
+                message: text.replace(/`/g, '') || "Beklager, jeg kunne ikke generere et gyldig svar."
+            };
         }
 
         let jsonString = text.substring(start, end + 1);
 
-        // 2. KRITISK RENSING: Fjern kontrolltegn og ulovlige linjeskift
-        // Dette fjerner linjeskift inne i tekstfelt som ofte knekker JSON.parse
+        // 2. RENSING: Fjern skadelige tegn
         jsonString = jsonString
-            .replace(/[\u0000-\u001F\u007F-\u009F]/g, "") // Fjerner ikke-printbare tegn
-            //.replace(/\n/g, "\\n")  // Bevarer linjeskift som kodesekvenser - disabled as it might double escape if AI is correct
+            .replace(/[\u0000-\u001F\u007F-\u009F]/g, "")
+            //.replace(/\n/g, "\\n") // Gemini er ofte flink til å escape selv nå, dobbel escaping kan ødelegge
             .replace(/\r/g, "\\r");
 
         try {
-            // Prøv å parse den rensede strengen
             const parsed = JSON.parse(jsonString);
-            return parsed;
-        } catch (e) {
-            console.error("JSON parse feilet etter rensing", {
-                error: e.message,
-                processedText: jsonString.substring(0, 100) + "..."
-            });
 
-            // Fallback: Hvis den fortsatt feiler, prøv en super-enkel rensing
+            // Validering
+            if (!parsed.message && !parsed.actions) {
+                return { message: text }; // Fallback hvis JSON er gyldig men tom/feil format
+            }
+
+            return parsed;
+
+        } catch (e) {
+            console.error("JSON parse feilet", { error: e.message, snippet: jsonString.substring(0, 100) });
+
+            // Siste sjanse: Prøv å fikse "single quotes" til "double quotes" (vanlig hallusinasjon)
             try {
-                const superCleaned = text.substring(start, end + 1).replace(/\s+/g, " ");
-                return JSON.parse(superCleaned);
+                const fixedJson = jsonString.replace(/'/g, '"');
+                return JSON.parse(fixedJson);
             } catch (e2) {
-                throw new HttpsError('internal', "AI-formatet var ugyldig. Vennligst prøv igjen.");
+                // Returner teksten inni JSON-klammer som melding hvis alt annet feiler
+                const content = text.substring(start + 1, end).trim(); // Fjerner brutalt { }
+                // Dette er ikke bra JSON, men vi kan prøve å redde teksten
+                return {
+                    message: "Beklager, teknisk feil i svaret. Her er råteksten: " + text
+                };
             }
         }
     } catch (error) {
@@ -463,7 +501,7 @@ Hvis data mangler eller er tomt, returner:
 // HELPERS
 // ==========================================
 function buildUserPrompt(userData, chunkInfo) {
-    const { goal = {}, planType } = userData;
+    const { goal = {}, planType, stravaHistory } = userData;
 
     let goalInfo = "";
     if (goal.type === 'race') {
@@ -484,6 +522,23 @@ function buildUserPrompt(userData, chunkInfo) {
         }
     }
 
+    // Bygg Strava-kontekst hvis tilgjengelig
+    let stravaContext = "";
+    if (stravaHistory && stravaHistory.hasEnoughData) {
+        stravaContext = `
+STRAVA-HISTORIKK (siste 4 uker - BRUK DETTE SOM UTGANGSPUNKT):
+- Ukentlig gjennomsnitt: ${stravaHistory.weeklyAvgKm} km
+- Lengste løp: ${stravaHistory.longestRun} km
+- Gjennomsnittspacing: ${stravaHistory.avgPace || 'ukjent'}/km
+- Konsistens: ${stravaHistory.consistency}%
+- Trend: ${stravaHistory.trend}
+
+VIKTIG: Start planen på et nivå som matcher denne historikken!
+- Første uke bør ha omtrent ${stravaHistory.weeklyAvgKm} km totalt
+- Long run bør starte på maks ${Math.round(stravaHistory.longestRun * 1.1)} km
+- Øk volumet gradvis (maks 10% per uke)`;
+    }
+
     // Beregn antall uker for JSON-strukturen
     const weeksToGenerate = chunkInfo ? chunkInfo.weeksPerChunk : (userData.planDuration || 4);
 
@@ -491,6 +546,7 @@ function buildUserPrompt(userData, chunkInfo) {
 
 ${goalInfo}
 ${chunkPrompt}
+${stravaContext}
 
 BRUKERDATA:
 ${JSON.stringify(userData, null, 2)}

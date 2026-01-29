@@ -5,7 +5,7 @@ import { Target, Save, Plus, X } from 'lucide-react'
 export default function GoalSetting() {
   const { userProfile, updateProfile } = useAuth()
   const [saving, setSaving] = useState(false)
-  
+
   const [goals, setGoals] = useState({
     primary: userProfile?.goals?.primary || '',
     secondary: userProfile?.goals?.secondary || [],
@@ -51,7 +51,7 @@ export default function GoalSetting() {
           Mine mål
         </h1>
         <p className="text-text-secondary mt-1">
-          Sett dine treningsmål for AI-planlegging
+          Dine mål former planen
         </p>
       </div>
 
@@ -77,7 +77,7 @@ export default function GoalSetting() {
           {goals.secondary.map((goal, idx) => (
             <div key={idx} className="flex items-center gap-2 p-2 bg-background-secondary rounded-lg">
               <span className="flex-1 text-sm">{goal}</span>
-              <button 
+              <button
                 onClick={() => removeSecondaryGoal(idx)}
                 className="p-1 hover:bg-error/20 rounded text-error"
               >
@@ -106,7 +106,7 @@ export default function GoalSetting() {
         <h3 className="font-medium text-text-primary mb-4">Ukentlige mål</h3>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="input-label">Løping (km/uke)</label>
+            <label className="input-label">Ønsket km/uke</label>
             <input
               type="number"
               value={goals.weeklyTargets.runningKm}
@@ -118,7 +118,7 @@ export default function GoalSetting() {
             />
           </div>
           <div>
-            <label className="input-label">Styrkeøkter/uke</label>
+            <label className="input-label">Styrkeøkter per uke</label>
             <input
               type="number"
               value={goals.weeklyTargets.strengthSessions}

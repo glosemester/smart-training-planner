@@ -20,10 +20,11 @@ export default {
           surface: "hsl(var(--bg-surface) / <alpha-value>)",
           elevated: "hsl(var(--bg-elevated) / <alpha-value>)",
         },
+        surface: "hsl(var(--bg-surface) / <alpha-value>)", // Alias for direct use (bg-surface)
         primary: {
           DEFAULT: "hsl(var(--primary) / <alpha-value>)",
           foreground: "hsl(var(--primary-foreground) / <alpha-value>)",
-          light: "hsl(21 90% 70%)", // Lighter variant for hovers
+          /* Removed 'light' variant as it's not in guidelines, relying on opacity or mapped vars */
         },
         accent: {
           DEFAULT: "hsl(var(--accent) / <alpha-value>)",

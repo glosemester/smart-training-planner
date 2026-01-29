@@ -3,12 +3,14 @@ import { useAuth } from '../../hooks/useAuth'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { generateTrainingPlan, generateTrainingPlanChunk } from '../../services/aiService'
 import { getWorkoutType } from '../../data/workoutTypes'
-import { Brain, Sparkles, RefreshCw, Check, Clock, MapPin, Edit2, Trash2, Plus, GripVertical, Image as ImageIcon, FileDown, X, Info, ChevronLeft } from 'lucide-react'
+import { Brain, Sparkles, RefreshCw, Check, Clock, MapPin, Edit2, Trash2, Plus, GripVertical, Image as ImageIcon, FileDown, X, Info, ChevronLeft, Activity, Download, Play } from 'lucide-react'
 import PlanningWizard from './PlanningWizard'
 import PlanAnalysis from './PlanAnalysis'
 import ImageUpload from '../common/ImageUpload'
 import { scanWorkout } from '../../services/workoutScanService'
+import { getMatchingStravaActivity } from '../../services/stravaService'
 import { exportPlanToPDF } from '../../utils/planExport'
+import LiveWorkout from '../workout/LiveWorkout'
 import { toast } from 'react-hot-toast'
 import {
   DndContext,
@@ -32,7 +34,7 @@ import { CSS } from '@dnd-kit/utilities'
 
 export default function AIPlanner() {
   const { userProfile } = useAuth()
-  const { workouts, currentPlan, savePlan, saveMultipleWeeks, updatePlanSession, addPlanSession, deletePlanSession, addWorkout } = useWorkouts()
+  const { workouts, currentPlan, plans, setCurrentPlan, savePlan, saveMultipleWeeks, updatePlanSession, addPlanSession, deletePlanSession, deleteAllPlans, addWorkout } = useWorkouts()
   const [showWizard, setShowWizard] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [generatingStep, setGeneratingStep] = useState('')
@@ -43,6 +45,7 @@ export default function AIPlanner() {
   const [addingSessionDay, setAddingSessionDay] = useState(null)
   const [viewingSession, setViewingSession] = useState(null)
   const [completingSession, setCompletingSession] = useState(null)
+  const [liveWorkoutSession, setLiveWorkoutSession] = useState(null)
   const [chunkProgress, setChunkProgress] = useState({
     currentChunk: 0,
     totalChunks: 0,
@@ -130,8 +133,8 @@ export default function AIPlanner() {
         // Update progress
         setChunkProgress(prev => ({ ...prev, currentChunk: chunkNum }))
         setGeneratingStep(
-          `Genererer uker ${startWeek}-${startWeek + weeksInThisChunk - 1}... ` +
-          `(chunk ${chunkNum}/${totalChunks})`
+          `Planlegger uke ${startWeek}-${startWeek + weeksInThisChunk - 1}... ` +
+          `(del ${chunkNum}/${totalChunks})`
         )
 
         // Prepare chunk info
@@ -156,7 +159,7 @@ export default function AIPlanner() {
           try {
             if (retries > 0) {
               setGeneratingStep(
-                `Genererer uker ${startWeek}-${startWeek + weeksInThisChunk - 1}... ` +
+                `Planlegger uke ${startWeek}-${startWeek + weeksInThisChunk - 1}... ` +
                 `(Prøve ${retries + 1}/${MAX_RETRIES})`
               )
               await new Promise(resolve => setTimeout(resolve, 2000))
@@ -185,7 +188,7 @@ export default function AIPlanner() {
 
         // Validate chunk data
         if (!chunkData || !chunkData.weeks || !Array.isArray(chunkData.weeks)) {
-          throw new Error('AI returnerte ikke uker i riktig format')
+          throw new Error('Noe gikk galt med planleggingen. Prøv igjen.')
         }
 
         // Process weeks in this chunk
@@ -264,12 +267,18 @@ export default function AIPlanner() {
   }
 
   // Calculate total weeks based on wizard answers
+  // Calculate total weeks based on wizard answers
   function calculateTotalWeeks(wizardAnswers) {
-    if (wizardAnswers.goal === 'race' && wizardAnswers.raceDetails?.date) {
-      const raceDate = new Date(wizardAnswers.raceDetails.date)
+    // Handle both old structure (goal === 'race') and new structure (goal.type === 'race')
+    const goalType = wizardAnswers.goal?.type || wizardAnswers.goal
+    const raceDate = wizardAnswers.goal?.date || wizardAnswers.raceDetails?.date
+
+    if (goalType === 'race' && raceDate) {
+      const raceDateObj = new Date(raceDate)
       const today = new Date()
-      const weeksUntilRace = Math.ceil((raceDate - today) / (7 * 24 * 60 * 60 * 1000))
-      return Math.min(weeksUntilRace, 24)  // Max 24 weeks
+      const weeksUntilRace = Math.ceil((raceDateObj - today) / (7 * 24 * 60 * 60 * 1000))
+      console.log(`📅 Race date: ${raceDate}, Weeks until race: ${weeksUntilRace}`)
+      return Math.max(4, Math.min(weeksUntilRace, 52))  // Min 4, max 52 weeks
     }
     return 12  // Default 12 weeks for non-race goals
   }
@@ -374,7 +383,8 @@ export default function AIPlanner() {
         } : {}),
         ...(workoutData.strength ? { strength: workoutData.strength } : {}),
         fromPlan: true,
-        planSessionId: session.id
+        // Only include planSessionId if it exists (avoid undefined in Firestore)
+        ...(session.id ? { planSessionId: session.id } : {})
       }
 
       // Add workout to logged workouts
@@ -440,7 +450,7 @@ export default function AIPlanner() {
             Plan
           </h1>
           <p className="text-gray-500 dark:text-gray-400 mt-1">
-            Din uke i korte trekk
+            Ukens oversikt
           </p>
         </div>
       </div>
@@ -480,7 +490,7 @@ export default function AIPlanner() {
           className="btn-primary w-full py-4 shadow-lg shadow-primary/20"
         >
           <Sparkles size={20} className="mr-2" />
-          {currentPlan ? 'Generer ny plan med AI' : 'Opprett treningsplan'}
+          {currentPlan ? 'Lag ny plan' : 'Opprett treningsplan'}
         </button>
       )}
 
@@ -495,12 +505,78 @@ export default function AIPlanner() {
       {displayPlan && (
         <div className="space-y-6">
 
+          {/* Week Navigation - only show if there are multiple weeks */}
+          {plans.length > 1 && (
+            <div className="flex items-center justify-between bg-gray-100 dark:bg-gray-800 rounded-xl p-3">
+              <button
+                onClick={() => {
+                  const currentIndex = plans.findIndex(p => p.id === currentPlan?.id)
+                  if (currentIndex < plans.length - 1) {
+                    setCurrentPlan(plans[currentIndex + 1]) // plans sorted by weekStart desc
+                  }
+                }}
+                disabled={plans.findIndex(p => p.id === currentPlan?.id) >= plans.length - 1}
+                className="px-4 py-2 text-sm font-medium bg-white dark:bg-gray-700 rounded-lg shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors flex items-center gap-2"
+              >
+                <ChevronLeft size={16} />
+                Forrige uke
+              </button>
+
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                  {plans.length} uker i planen
+                </span>
+                <button
+                  onClick={async () => {
+                    if (window.confirm(`Er du sikker på at du vil slette alle ${plans.length} uker?\n\nDette kan ikke angres.`)) {
+                      try {
+                        await deleteAllPlans()
+                        toast.success('Alle planer slettet!')
+                      } catch (err) {
+                        toast.error('Kunne ikke slette planer')
+                      }
+                    }
+                  }}
+                  className="p-1.5 text-red-500 hover:bg-red-100 dark:hover:bg-red-500/20 rounded-lg transition-colors"
+                  title="Slett alle planer"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+
+              <button
+                onClick={() => {
+                  const currentIndex = plans.findIndex(p => p.id === currentPlan?.id)
+                  if (currentIndex > 0) {
+                    setCurrentPlan(plans[currentIndex - 1]) // plans sorted by weekStart desc
+                  }
+                }}
+                disabled={plans.findIndex(p => p.id === currentPlan?.id) <= 0}
+                className="px-4 py-2 text-sm font-medium bg-white dark:bg-gray-700 rounded-lg shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors flex items-center gap-2"
+              >
+                Neste uke
+                <ChevronLeft size={16} className="rotate-180" />
+              </button>
+            </div>
+          )}
+
           {/* Plan header */}
           <div className="card bg-gray-900 text-white border-none p-6 relative overflow-hidden">
             <div className="relative z-10 flex items-start justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">
-                  Uke {displayPlan.weekNumber || ''}
+                  Uke {displayPlan.weekNumber || ''} av {displayPlan.planDuration || '?'}
+                  {displayPlan.weekStart && (
+                    <span className="ml-2 text-gray-500 font-normal normal-case">
+                      ({new Date(displayPlan.weekStart).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short' })} - {
+                        (() => {
+                          const end = new Date(displayPlan.weekStart)
+                          end.setDate(end.getDate() + 6)
+                          return end.toLocaleDateString('nb-NO', { day: 'numeric', month: 'short' })
+                        })()
+                      })
+                    </span>
+                  )}
                 </p>
                 <h3 className="font-heading font-bold text-2xl mt-1">
                   {displayPlan.focus}
@@ -608,6 +684,23 @@ export default function AIPlanner() {
         <SessionDetailModal
           session={viewingSession}
           onClose={() => setViewingSession(null)}
+          onStartLive={(session) => {
+            setViewingSession(null)
+            setLiveWorkoutSession(session)
+          }}
+        />
+      )}
+
+      {/* Live Workout */}
+      {liveWorkoutSession && (
+        <LiveWorkout
+          session={liveWorkoutSession}
+          onComplete={(data) => {
+            // Auto-open complete modal with workout data
+            setLiveWorkoutSession(null)
+            setCompletingSession(liveWorkoutSession)
+          }}
+          onCancel={() => setLiveWorkoutSession(null)}
         />
       )}
 
@@ -1035,9 +1128,70 @@ function AddSessionModal({ day, onSave, onCancel }) {
   )
 }
 
+// Treadmill Converter Component
+function TreadmillConverter({ targetPace }) {
+  const [incline, setIncline] = useState(1) // Default 1% for wind resistance compensation
+
+  // Parse pace string "5:30" to minutes as decimal
+  const parsePace = (paceStr) => {
+    if (!paceStr) return null
+    const match = paceStr.match(/(\d+):(\d+)/)
+    if (!match) return null
+    return parseInt(match[1]) + parseInt(match[2]) / 60
+  }
+
+  const paceMinutes = parsePace(targetPace)
+  if (!paceMinutes) return null
+
+  // Calculate speed in km/h
+  const speedKmh = 60 / paceMinutes
+
+  // Jones & Doust formula: 1% incline ≈ 0.8% increased energy cost
+  // To maintain same effort on treadmill, reduce speed slightly per % incline
+  const adjustedSpeed = speedKmh * (1 - incline * 0.008)
+
+  return (
+    <div className="mt-4 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
+      <h4 className="font-semibold text-blue-900 dark:text-blue-300 mb-3 flex items-center gap-2">
+        <Activity size={18} />
+        Mølle-innstillinger
+      </h4>
+
+      <div className="flex items-center gap-4">
+        <div className="flex-shrink-0">
+          <label className="text-sm text-blue-700 dark:text-blue-400 block mb-1">Stigning</label>
+          <select
+            value={incline}
+            onChange={(e) => setIncline(Number(e.target.value))}
+            className="px-3 py-2 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+          >
+            {[0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8].map(v => (
+              <option key={v} value={v}>{v}%</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex-1 text-center">
+          <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+            {adjustedSpeed.toFixed(1)} km/t
+          </div>
+          <div className="text-sm text-blue-600/70 dark:text-blue-400/70">
+            @ {incline}% stigning
+          </div>
+        </div>
+      </div>
+
+      <p className="text-xs text-blue-600/60 dark:text-blue-400/60 mt-3 text-center">
+        Tilsvarer {targetPace}/km utendørs (Jones & Doust-formel)
+      </p>
+    </div>
+  )
+}
+
 // Session Detail Modal
-function SessionDetailModal({ session, onClose }) {
+function SessionDetailModal({ session, onClose, onStartLive }) {
   const type = getWorkoutType(session.type)
+  const isRunning = ['easy_run', 'tempo', 'interval', 'long_run', 'running'].includes(session.type)
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
@@ -1139,6 +1293,11 @@ function SessionDetailModal({ session, onClose }) {
             </div>
           )}
 
+          {/* Treadmill Converter - show for running sessions with target pace */}
+          {isRunning && session.details?.target_pace && (
+            <TreadmillConverter targetPace={session.details.target_pace} />
+          )}
+
           {/* Additional notes */}
           {session.notes && (
             <div className="bg-gray-50 dark:bg-white/5 rounded-xl p-4">
@@ -1152,11 +1311,20 @@ function SessionDetailModal({ session, onClose }) {
           )}
         </div>
 
-        {/* Footer */}
-        <div className="sticky bottom-0 bg-white dark:bg-background-card border-t border-gray-200 dark:border-white/10 p-4">
+        {/* Footer with Live Workout button */}
+        <div className="sticky bottom-0 bg-white dark:bg-background-card border-t border-gray-200 dark:border-white/10 p-4 space-y-3">
+          {/* Start Live Workout button */}
+          <button
+            onClick={() => onStartLive?.(session)}
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl font-semibold transition-all shadow-lg shadow-green-500/20"
+          >
+            <Play size={18} fill="currentColor" />
+            Start live trening
+          </button>
+
           <button
             onClick={onClose}
-            className="btn-primary w-full"
+            className="btn-outline w-full"
           >
             Lukk
           </button>
@@ -1168,17 +1336,54 @@ function SessionDetailModal({ session, onClose }) {
 
 // Complete Session Modal
 function CompleteSessionModal({ session, onSave, onCancel }) {
+  const { userProfile } = useAuth()
   const type = getWorkoutType(session.type)
   const [formData, setFormData] = useState({
     duration: session.duration_minutes || 60,
     rpe: 5,
     distance: session.details?.distance_km || 0,
     avgPace: '',
+    avgHR: '',
+    maxHR: '',
     surface: 'asphalt',
     notes: ''
   })
+  const [stravaLoading, setStravaLoading] = useState(false)
+  const [stravaImported, setStravaImported] = useState(false)
 
   const isRunning = ['easy_run', 'tempo', 'interval', 'long_run', 'running'].includes(session.type)
+
+  // Hent data fra Strava
+  const handleFetchFromStrava = async () => {
+    if (!userProfile?.id) return
+
+    setStravaLoading(true)
+    try {
+      // Beregn dato for denne økten basert på plan weekStart og dag
+      const today = new Date()
+      const stravaData = await getMatchingStravaActivity(userProfile.id, today.toISOString(), session.type)
+
+      if (stravaData) {
+        setFormData(prev => ({
+          ...prev,
+          duration: stravaData.duration || prev.duration,
+          distance: stravaData.distance ? Math.round(stravaData.distance * 10) / 10 : prev.distance,
+          avgPace: stravaData.avgPace || prev.avgPace,
+          avgHR: stravaData.avgHR || prev.avgHR,
+          maxHR: stravaData.maxHR || prev.maxHR
+        }))
+        setStravaImported(true)
+        toast.success('✅ Data hentet fra Strava!')
+      } else {
+        toast.error('Fant ingen matchende aktivitet på Strava')
+      }
+    } catch (err) {
+      console.error('Strava fetch error:', err)
+      toast.error('Kunne ikke hente data fra Strava')
+    } finally {
+      setStravaLoading(false)
+    }
+  }
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -1204,6 +1409,37 @@ function CompleteSessionModal({ session, onSave, onCancel }) {
               <p className="text-sm text-gray-600 dark:text-text-muted">{session.title}</p>
             </div>
           </div>
+        </div>
+
+        {/* Strava Import Button */}
+        <div className="px-6 pt-4">
+          <button
+            type="button"
+            onClick={handleFetchFromStrava}
+            disabled={stravaLoading || stravaImported}
+            className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-medium transition-all
+              ${stravaImported
+                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
+                : 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-900/50 border border-orange-200 dark:border-orange-800'
+              }`}
+          >
+            {stravaLoading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                Henter fra Strava...
+              </>
+            ) : stravaImported ? (
+              <>
+                <Check size={18} />
+                Data importert fra Strava
+              </>
+            ) : (
+              <>
+                <Activity size={18} />
+                Hent data fra Strava
+              </>
+            )}
+          </button>
         </div>
 
         {/* Form */}
@@ -1294,6 +1530,40 @@ function CompleteSessionModal({ session, onSave, onCancel }) {
                   <option value="track">Bane</option>
                   <option value="treadmill">Tredemølle</option>
                 </select>
+              </div>
+
+              {/* Heart rate fields */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="complete-avghr" className="input-label">
+                    Snitt puls (bpm)
+                  </label>
+                  <input
+                    id="complete-avghr"
+                    type="number"
+                    value={formData.avgHR}
+                    onChange={(e) => setFormData({ ...formData, avgHR: e.target.value })}
+                    className="input"
+                    placeholder="145"
+                    min="0"
+                    max="250"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="complete-maxhr" className="input-label">
+                    Maks puls (bpm)
+                  </label>
+                  <input
+                    id="complete-maxhr"
+                    type="number"
+                    value={formData.maxHR}
+                    onChange={(e) => setFormData({ ...formData, maxHR: e.target.value })}
+                    className="input"
+                    placeholder="175"
+                    min="0"
+                    max="250"
+                  />
+                </div>
               </div>
             </>
           )}

@@ -134,7 +134,7 @@ export default function DailySummaryCard({ delay = 0 }) {
       <GlassCard className="flex items-center justify-center p-8 border-dashed border-2 border-white/10">
         <div className="text-center">
           <Sparkles className="text-primary animate-pulse mx-auto mb-2" size={24} />
-          <p className="text-sm font-medium text-text-secondary">Genererer innsikt...</p>
+          <p className="text-sm font-medium text-text-secondary">Analyserer data...</p>
         </div>
       </GlassCard>
     )
@@ -147,7 +147,7 @@ export default function DailySummaryCard({ delay = 0 }) {
         <div className="flex items-start gap-3">
           <AlertCircle className="text-destructive flex-shrink-0 mt-0.5" size={20} />
           <div className="flex-1 min-w-0">
-            <p className="text-sm text-destructive font-medium">Kunne ikke laste oppsummering</p>
+            <p className="text-sm text-destructive font-medium">Klarte ikke hente rapporten</p>
           </div>
           <button
             onClick={() => handleGenerateSummary(true)}
@@ -173,7 +173,7 @@ export default function DailySummaryCard({ delay = 0 }) {
             <Sparkles className="text-primary" size={20} />
           </div>
           <div>
-            <p className="font-semibold text-text-primary">Få dagens AI-tips</p>
+            <p className="font-semibold text-text-primary">Hent dagens rapport</p>
             <p className="text-xs text-text-secondary">Basert på din trening og form</p>
           </div>
         </div>
@@ -184,52 +184,36 @@ export default function DailySummaryCard({ delay = 0 }) {
     )
   }
 
-  // Mood colors - Glassmorphism style
-  const moodVariant = {
-    positive: 'bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border-emerald-500/20',
-    neutral: 'bg-gradient-to-br from-blue-500/10 to-blue-500/5 border-blue-500/20',
-    warning: 'bg-gradient-to-br from-amber-500/10 to-amber-500/5 border-amber-500/20'
-  }
-
-  const textVariant = {
-    positive: 'text-emerald-400',
-    neutral: 'text-blue-400',
-    warning: 'text-amber-400'
-  }
-
-  const variantClass = moodVariant[summary.mood] || moodVariant.neutral
-  const textClass = textVariant[summary.mood] || textVariant.neutral
-
   return (
-    <GlassCard className={`${variantClass} transition-colors`}>
-      {/* Header */}
-      <div className="flex items-start justify-between mb-3">
-        <div className={`flex items-center gap-2 ${textClass}`}>
+    <GlassCard className="transition-all duration-300">
+      {/* Header - Brand Style */}
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex items-center gap-2 text-primary">
           <Sparkles size={18} className="currentColor" />
-          <span className="text-xs font-bold uppercase tracking-wider opacity-90">
-            Dagens fokus
+          <span className="text-xs font-bold uppercase tracking-wider text-text-secondary">
+            Dagens Fokus
           </span>
         </div>
         <button
           onClick={() => handleGenerateSummary(true)}
-          className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-text-muted hover:text-text-primary"
+          className="p-2 hover:bg-white/5 rounded-full transition-colors text-text-muted hover:text-white"
           title="Oppdater"
         >
           <RefreshCw size={14} />
         </button>
       </div>
 
-      <h3 className="font-heading font-bold text-lg mb-3 text-text-primary text-balance text-glow">
+      <h3 className="font-heading font-bold text-xl mb-4 text-text-primary leading-tight">
         {summary.headline}
       </h3>
 
       {/* Insights */}
       {summary.insights && summary.insights.length > 0 && (
-        <ul className="space-y-2 mb-5">
+        <ul className="space-y-3 mb-6">
           {summary.insights.map((insight, idx) => (
-            <li key={idx} className="text-sm text-text-secondary flex items-start gap-2.5">
-              <span className={`mt-1.5 w-1.5 h-1.5 rounded-full ${textClass} opacity-80 shrink-0`} />
-              <span>{insight}</span>
+            <li key={idx} className="text-sm text-text-secondary flex items-start gap-3">
+              <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0 shadow-[0_0_8px_rgba(185,228,60,0.6)]" />
+              <span className="leading-relaxed">{insight}</span>
             </li>
           ))}
         </ul>
@@ -237,31 +221,30 @@ export default function DailySummaryCard({ delay = 0 }) {
 
       {/* Recommendation */}
       {summary.recommendation && (
-        <div className="bg-background-main/30 rounded-xl p-4 backdrop-blur-md border border-white/5">
+        <div className="bg-black/20 rounded-2xl p-5 border border-white/5 mb-6">
           <div className="flex items-start gap-3">
-            <TrendingUp size={18} className={`mt-0.5 ${textClass}`} />
-            <p className="text-sm font-medium leading-relaxed text-text-primary">
+            <TrendingUp size={18} className="mt-0.5 text-primary" />
+            <p className="text-sm font-medium leading-relaxed text-text-primary/90">
               {summary.recommendation}
             </p>
           </div>
         </div>
       )}
 
-      {/* Readiness Score */}
+      {/* Readiness Score - New Design */}
       {summary.readinessScore && (
-        <div className="flex items-center gap-3 mt-4 pt-3 border-t border-white/10">
-          <div className="flex items-center gap-2 flex-1">
-            <Battery size={16} className="text-text-muted" />
-            <span className="text-xs font-medium text-text-secondary">Batteri</span>
+        <div className="flex items-center gap-4 pt-2">
+          <div className="flex items-center gap-2 min-w-[80px]">
+            <Battery size={18} className="text-text-secondary" />
+            <span className="text-sm font-bold text-white">{summary.readinessScore}/10</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-24 h-2 bg-white/10 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full ${summary.mood === 'positive' ? 'bg-emerald-500' : summary.mood === 'warning' ? 'bg-amber-500' : 'bg-blue-500'}`}
-                style={{ width: `${summary.readinessScore * 10}%` }}
-              />
-            </div>
-            <span className="text-sm font-bold text-text-primary">{summary.readinessScore}/10</span>
+          <div className="flex-1 h-3 bg-white/5 rounded-full overflow-hidden p-[2px]">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ease-out ${summary.riskLevel === 'high' ? 'bg-error shadow-[0_0_10px_rgba(255,82,82,0.4)]' :
+                'bg-primary shadow-[0_0_10px_rgba(185,228,60,0.4)]'
+                }`}
+              style={{ width: `${summary.readinessScore * 10}%` }}
+            />
           </div>
         </div>
       )}

@@ -46,6 +46,11 @@ export default function AIChat() {
       // Send to AI
       const response = await sendChatMessage(updatedMessages, userContext)
 
+      // Validate response
+      if (!response || !response.message) {
+        throw new Error('AI-en ga et ugyldig svar. Vennligst prøv igjen.')
+      }
+
       // Add AI response to chat
       const aiMessage = {
         role: 'assistant',
@@ -61,8 +66,29 @@ export default function AIChat() {
         })
       }
     } catch (err) {
-      setError(err.message || 'Kunne ikke sende melding')
       console.error('Chat error:', err)
+
+      // Provide user-friendly error messages
+      let errorMessage = 'Kunne ikke sende melding. '
+
+      const errString = err.toString().toLowerCase()
+      if (errString.includes('timeout') || errString.includes('deadline')) {
+        errorMessage += 'AI-tenkepausen ble for lang (timeout). Prøv med litt kortere melding.'
+      } else if (errString.includes('network') || errString.includes('fetch')) {
+        errorMessage += 'Sjekk internettforbindelsen din.'
+      } else if (errString.includes('json') || errString.includes('parse')) {
+        errorMessage += 'AI-svaret var litt uleselig. Prøve å spørre på en annen måte?' // Mykere feilmelding
+      } else if (errString.includes('internal')) {
+        errorMessage += 'Teknisk feil i skyen. Vi jobber med saken.'
+      } else {
+        errorMessage += err.message || 'Ukjent feil oppstod.'
+      }
+
+      setError(errorMessage)
+
+      // Add error message to chat for context
+      // setMessages([...updatedMessages, { role: 'assistant', content: '❌ ' + errorMessage }]) 
+      // ^ Deaktivert: Bedre å bare vise feilmeldingen i UI-boksen enn å forsøple chatten
     } finally {
       setLoading(false)
     }
@@ -218,9 +244,8 @@ export default function AIChat() {
             {messages.map((message, index) => (
               <div
                 key={index}
-                className={`flex gap-3 ${
-                  message.role === 'user' ? 'justify-end' : 'justify-start'
-                }`}
+                className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'
+                  }`}
               >
                 {message.role === 'assistant' && (
                   <div className="w-8 h-8 rounded-full bg-secondary/20 flex items-center justify-center flex-shrink-0">
@@ -229,11 +254,10 @@ export default function AIChat() {
                 )}
 
                 <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                    message.role === 'user'
-                      ? 'bg-primary text-white'
-                      : 'bg-background-secondary text-text-primary'
-                  }`}
+                  className={`max-w-[80%] rounded-2xl px-4 py-3 ${message.role === 'user'
+                    ? 'bg-primary text-white'
+                    : 'bg-background-secondary text-text-primary'
+                    }`}
                 >
                   <p className="whitespace-pre-wrap text-sm leading-relaxed">
                     {message.content}
@@ -307,7 +331,7 @@ export default function AIChat() {
       {workouts.length > 0 && (
         <p className="text-xs text-text-muted mt-2 flex items-center gap-1">
           <Sparkles size={12} />
-          AI-en har tilgang til dine siste {Math.min(workouts.length, 10)} treningsøkter
+          AI-en har tilgang til dine siste {Math.min(workouts.length, 50)} treningsøkter
           {currentPlan && ' og din nåværende plan'}
         </p>
       )}

@@ -16,6 +16,8 @@ import {
   Plus
 } from 'lucide-react'
 import DailySummaryCard from './DailySummaryCard'
+import WeeklyProgress from './WeeklyProgress'
+import WeekCalendarStrip from './WeekCalendarStrip'
 import StravaSummaryCard from './StravaSummaryCard'
 import NutritionWidget from './NutritionWidget'
 import VitalGoals from './VitalGoals'
@@ -28,34 +30,7 @@ export default function Dashboard() {
 
   const firstName = userProfile?.displayName?.split(' ')[0] || 'Løper'
 
-  // Beregn statistikk for denne uken
-  const weekStats = useMemo(() => {
-    const now = new Date()
-    const weekStart = startOfWeek(now, { weekStartsOn: 1 })
-    const weekEnd = endOfWeek(now, { weekStartsOn: 1 })
 
-    const thisWeekWorkouts = workouts.filter(w => {
-      const date = new Date(w.date)
-      return date >= weekStart && date <= weekEnd
-    })
-
-    let totalKm = 0
-    let totalMinutes = 0
-    let strengthSessions = 0
-
-    thisWeekWorkouts.forEach(w => {
-      totalMinutes += w.duration || 0
-      if (w.running?.distance) totalKm += w.running.distance
-      if (['hyrox', 'crossfit', 'strength'].includes(w.type)) strengthSessions++
-    })
-
-    return {
-      workouts: thisWeekWorkouts.length,
-      runningKm: Math.round(totalKm * 10) / 10,
-      hours: Math.round(totalMinutes / 60 * 10) / 10,
-      strengthSessions
-    }
-  }, [workouts.length])
 
   // Neste planlagte økt
   const nextWorkout = useMemo(() => {
@@ -128,10 +103,10 @@ export default function Dashboard() {
       <div className="flex items-end justify-between px-1">
         <div>
           <p className="text-xs font-medium text-text-secondary mb-1 uppercase tracking-widest">
-            {format(new Date(), 'EEEE d. MMM', { locale: nb })}
+            {format(new Date(), 'MMMM yyyy', { locale: nb })}
           </p>
           <h1 className="font-heading text-3xl font-bold text-text-primary tracking-tight">
-            Hei, <span className="bg-gradient-to-r from-white to-gray-500 bg-clip-text text-transparent">{firstName}</span>
+            Hei, <span className="text-white">{firstName}</span>
           </h1>
         </div>
 
@@ -142,16 +117,22 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* 2. Hero: Daily Summary */}
+      {/* 2. Week Calendar Strip */}
+      <WeekCalendarStrip />
+
+      {/* 3. Hero: Daily Summary ("Ready to run today?") */}
       <DailySummaryCard delay={1500} />
 
-      {/* 3. Next Workout */}
+      {/* 4. Your Progress (Ring Chart + Stats) */}
+      <WeeklyProgress workouts={workouts} />
+
+      {/* 5. Next Workout */}
       {nextWorkout ? (
         <section>
           <div className="flex items-center justify-between px-1 mb-3">
             <h2 className="text-lg font-semibold text-text-primary">Neste økt</h2>
             <Link to="/plan" className="text-xs text-primary hover:text-primary-light font-medium uppercase tracking-wider">
-              Se plan
+              Åpne plan
             </Link>
           </div>
           <Link to="/plan" className="block group">
@@ -200,52 +181,18 @@ export default function Dashboard() {
         <section>
           <GlassCard className="flex flex-col items-center justify-center py-8 text-center border-dashed border-2 border-white/5 bg-transparent">
             <Calendar className="text-text-muted mb-3 opacity-50" size={32} />
-            <p className="text-text-secondary font-medium mb-4">Ingen planlagte økter</p>
+            <p className="text-text-secondary font-medium mb-4">Ingen aktiv plan</p>
             <Link to="/plan">
-              <Button size="sm" variant="outline">Generer plan</Button>
+              <Button size="sm" variant="outline">Lag ny plan</Button>
             </Link>
           </GlassCard>
         </section>
       )}
 
-      {/* 4. Week Stats Grid (2x2) */}
-      <section>
-        <h2 className="px-1 text-lg font-semibold text-text-primary mb-3">Denne uken</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <GlassCard className="flex flex-col gap-1">
-            <div className="flex items-center gap-2 text-text-muted mb-1">
-              <Activity size={14} />
-              <span className="text-[10px] uppercase font-bold tracking-wider">Økter</span>
-            </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-bold text-text-primary">{weekStats.workouts}</span>
-              <span className="text-sm text-text-muted">/ 5</span>
-            </div>
-          </GlassCard>
-
-          <GlassCard className="flex flex-col gap-1">
-            <div className="flex items-center gap-2 text-text-muted mb-1">
-              <MapPin size={14} />
-              <span className="text-[10px] uppercase font-bold tracking-wider">Distanse</span>
-            </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-bold text-text-primary">{weekStats.runningKm}</span>
-              <span className="text-sm text-text-muted">km</span>
-            </div>
-          </GlassCard>
-        </div>
-      </section>
-
-      {/* 5. Integrations & Widgets */}
-      <div className="grid gap-6">
-        <StravaSummaryCard />
-        <NutritionWidget />
-      </div>
-
       {/* 6. Recent Workouts */}
       <section>
         <div className="flex items-center justify-between px-1 mb-3">
-          <h2 className="text-lg font-semibold text-text-primary">Siste økter</h2>
+          <h2 className="text-lg font-semibold text-text-primary">Nylige økter</h2>
           <Link to="/workouts" className="text-xs text-primary hover:text-primary-light font-medium uppercase tracking-wider">
             Se alle
           </Link>
@@ -259,14 +206,18 @@ export default function Dashboard() {
               className="border-dashed border-2 border-white/10 bg-transparent flex items-center justify-center gap-2 py-4 group hover:border-primary/50 hover:bg-primary/5 transition-all"
             >
               <Plus size={20} className="text-text-muted group-hover:text-primary transition-colors" />
-              <span className="font-medium text-text-secondary group-hover:text-primary transition-colors">Logg ny økt</span>
+              <span className="font-medium text-text-secondary group-hover:text-primary transition-colors">Logg økt</span>
             </GlassCard>
           </Link>
         </div>
       </section>
 
-      {/* Vital Goals */}
-      <VitalGoals />
+      {/* 7. Integrations & Widgets (Moved to bottom or removed if cluttering? Keeping for functionality) */}
+      <div className="grid gap-6">
+        <StravaSummaryCard />
+        <NutritionWidget />
+        <VitalGoals />
+      </div>
     </div>
   )
 }
