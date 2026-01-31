@@ -1,6 +1,7 @@
 import { useAuth } from '../../hooks/useAuth'
 import { useTheme } from '../../contexts/ThemeContext'
-import { LogOut, Sun, Moon } from 'lucide-react'
+import { LogOut, Sun, Moon, Bell } from 'lucide-react'
+import { requestNotificationPermission } from '../../services/notificationService'
 
 export default function Header() {
   const { user, signOut } = useAuth()
@@ -29,6 +30,15 @@ export default function Header() {
               className="w-8 h-8 rounded-full border-2 border-white/10"
             />
           )}
+
+          {/* Notifications toggle */}
+          <button
+            onClick={() => requestNotificationPermission()}
+            className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-colors"
+            title="Aktiver varsler"
+          >
+            <Bell size={20} />
+          </button>
 
           {/* Theme toggle */}
           <button

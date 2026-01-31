@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 
 const Button = ({
     children,
@@ -6,9 +7,10 @@ const Button = ({
     size = 'md',
     className = '',
     isLoading = false,
+    onClick,
     ...props
 }) => {
-    const baseStyles = 'btn-new relative overflow-hidden';
+    const baseStyles = 'btn-new relative overflow-hidden flex items-center justify-center';
 
     const variants = {
         primary: 'btn-primary-glow',
@@ -25,7 +27,9 @@ const Button = ({
     };
 
     return (
-        <button
+        <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.95 }}
             className={`
         ${baseStyles}
         ${variants[variant] || variants.primary}
@@ -33,13 +37,14 @@ const Button = ({
         ${className}
       `}
             disabled={isLoading || props.disabled}
+            onClick={onClick}
             {...props}
         >
             {isLoading && (
                 <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
             )}
             {children}
-        </button>
+        </motion.button>
     );
 };
 

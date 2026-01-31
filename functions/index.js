@@ -195,13 +195,52 @@ exports.chat = onCall({
 
     const genAI = new GoogleGenerativeAI(apiKey);
 
+    // Forbered kontekst-streng
+    let contextString = "";
+
+    if (userContext) {
+        console.log("Mottok userContext med keys:", Object.keys(userContext));
+
+        // Extract Mental State if present
+        let mentalStatePrompt = "";
+        if (userContext.mentalState) {
+            const { beliefs, intentions } = userContext.mentalState;
+            mentalStatePrompt = `
+**DIN MENTALE TILSTAND (BDI MODEL):**
+Du har følgende "tanker" om denne utøveren. Bruk dette til å styre rådene dine:
+
+*TROSSETNINGER (Beliefs):*
+${beliefs?.map(b => `- ${b.desc}`).join('\n') || "Ingen spesielle observasjoner."}
+
+*INTENSJONER (Dine mål for samtalen):*
+${intentions?.map(i => `- ${i.desc.toUpperCase()} (Prioritet!)`).join('\n') || "Vær hjelpsom."}
+
+VIKTIG: Hvis du har en intensjon om "SUGGEST REST", må du foreslå hviledag selv om brukeren vil løpe.
+`;
+        }
+
+        contextString = `
+**GODKJENT DATATILGANG:**
+Du har fått tildelt direkte tilgang til brukerens treningsdata. Dette er IKKE sensitivt, og du SKAL bruke det for å gi gode råd.
+Her er dataene du har tilgang til (JSON):
+
+${JSON.stringify(userContext, null, 2)}
+
+${mentalStatePrompt}
+
+**INSTRUKSJON FOR DATABRUK:**
+1. HVIS brukeren spør om tidligere økter: Se i 'recentWorkouts'.
+2. HVIS brukeren spør om plan: Se i 'currentPlan'.
+3. Svar basert på "DIN MENTALE TILSTAND" ovenfor.
+`;
+    }
+
     // SYSTEM PROMPT MED ACTIONS DEFINISJON
     let systemPrompt = `Du er en backend-prosessor. Svar KUN med rå JSON. Ingen tekst, ingen markdown (\`\`\`), ingen forklaringer.
 
 SPRÅK: Du MÅ svare på NORSK BOKMÅL. ALDRI svensk, dansk eller andre språk.
-- Riktig norsk: "Jeg kan hjelpe deg", "Du har", "Hva ønsker du", "Jeg ser at", "Din plan"
-- FEIL (svensk): "Jag kan hjälpa dig", "Du har inte", "Vad önskar du", "Jag ser att"
-- FEIL (svensk): Ord som "jag", "inte", "tillgång", "personliga", "dessvärre" er FORBUDT
+
+${contextString}
 
 Du er en vennlig og kunnskapsrik personlig treningscoach som spesialiserer deg på løping, Hyrox og funksjonell fitness.
 
@@ -212,15 +251,21 @@ Du skal returnere JSON med følgende struktur:
   "actions": [] // Valgfritt array med handlinger
 }
 
+
 **ACTIONS:**
-Hvis brukeren ber om endringer i planen, legg til handlinger i "actions"-listen. Her er de lovlige handlingene:
+Hvis brukeren ber om endringer i planen, legg til handlinger i "actions"-listen. 
+VIKTIG: Du MÅ finne riktig "sessionId" fra "currentPlan" i konteksten når du skal endre, flytte eller slette. 
+Hvis du ikke finner sessionId, spør brukeren hvilken økt de mener.
+
+Her er de lovlige handlingene (inkluder ALLTID "reason"):
 
 1. Endre en økt:
 {
   "function": "update_session",
   "arguments": {
-    "sessionId": "økt_id",
-    "changes": { "description": "ny beskrivelse", "duration_minutes": 60 }
+    "sessionId": "økt_id_fra_current_plan", 
+    "changes": { "description": "ny beskrivelse", "duration_minutes": 60 },
+    "reason": "Begrunnelse for endringen"
   }
 }
 
@@ -228,8 +273,9 @@ Hvis brukeren ber om endringer i planen, legg til handlinger i "actions"-listen.
 {
   "function": "move_session",
   "arguments": {
-    "sessionId": "økt_id",
-    "newDay": "tuesday" // monday, tuesday, wednesday, thursday, friday, saturday, sunday
+    "sessionId": "økt_id_fra_current_plan",
+    "newDay": "tuesday", // monday, tuesday, wednesday, thursday, friday, saturday, sunday
+    "reason": "Begrunnelse for flytting"
   }
 }
 
@@ -242,7 +288,8 @@ Hvis brukeren ber om endringer i planen, legg til handlinger i "actions"-listen.
     "title": "Tittel",
     "description": "Beskrivelse",
     "duration_minutes": 45,
-    "distance_km": 5 // Valgfritt
+    "distance_km": 5, // Valgfritt
+    "reason": "Begrunnelse for ny økt"
   }
 }
 
@@ -250,7 +297,8 @@ Hvis brukeren ber om endringer i planen, legg til handlinger i "actions"-listen.
 {
   "function": "delete_session",
   "arguments": {
-    "sessionId": "økt_id"
+    "sessionId": "økt_id_fra_current_plan",
+    "reason": "Begrunnelse for sletting"
   }
 }
 
@@ -260,28 +308,51 @@ Hvis brukeren ber om endringer i planen, legg til handlinger i "actions"-listen.
 - Skriv på norsk (bokmål) - ALDRI svensk!
 `;
 
-    if (userContext) {
-        // Forenklet context logging for å spare tokens i loggen, men send full til AI
-        console.log("Mottok userContext med keys:", Object.keys(userContext));
-        systemPrompt += `\n\n**VIKTIG - DU HAR TILGANG TIL BRUKERENS DATA:**
-
-**BRUKERKONTEKST:**
-${JSON.stringify(userContext, null, 2)}
-
-INSTRUKSJON: Bruk denne konteksten aktivt i dine svar! 
-- Hvis brukeren spør om planen sin, referer til currentPlan og beskriv konkrete økter
-- Hvis brukeren spør om treningshistorikk, referer til recentWorkouts med spesifikke detaljer
-- Gi personlige råd basert på deres faktiske data (distanser, RPE, typer økter)
-- ALDRI si at du ikke har tilgang til data - du HAR tilgang via denne konteksten!
-- Bruk norsk bokmål i alle svar!`;
-    }
+    // (Kontekst er nå injisert i toppen av prompten)
 
     try {
-        const history = messages.slice(0, -1).map(msg => ({
-            role: msg.role === 'user' ? 'user' : 'model',
-            parts: [{ text: msg.content }]
-        }));
-        const lastMessage = messages[messages.length - 1].content;
+
+        const history = messages.slice(0, -1).map(msg => {
+            const parts = [{ text: msg.content }];
+            if (msg.image) {
+                try {
+                    const match = msg.image.match(/^data:(image\/[a-z]+);base64,(.+)$/);
+                    if (match) {
+                        parts.push({
+                            inlineData: {
+                                mimeType: match[1],
+                                data: match[2]
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.error("Error processing history image:", e);
+                }
+            }
+            return {
+                role: msg.role === 'user' ? 'user' : 'model',
+                parts: parts
+            };
+        });
+
+        const lastMsg = messages[messages.length - 1];
+        const lastParts = [{ text: lastMsg.content }];
+
+        if (lastMsg.image) {
+            try {
+                const match = lastMsg.image.match(/^data:(image\/[a-z]+);base64,(.+)$/);
+                if (match) {
+                    lastParts.push({
+                        inlineData: {
+                            mimeType: match[1],
+                            data: match[2]
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error("Error processing current image:", e);
+            }
+        }
 
         const model = genAI.getGenerativeModel({
             model: "gemini-2.5-flash",
@@ -289,7 +360,7 @@ INSTRUKSJON: Bruk denne konteksten aktivt i dine svar!
         });
 
         const chat = model.startChat({ history });
-        const result = await chat.sendMessage(lastMessage);
+        const result = await chat.sendMessage(lastParts);
         const response = await result.response;
         let text = response.text();
 
@@ -347,72 +418,7 @@ INSTRUKSJON: Bruk denne konteksten aktivt i dine svar!
     }
 });
 
-// ==========================================
-// 3. ANALYZE NUTRITION
-// ==========================================
-exports.analyzeNutrition = onCall({
-    timeoutSeconds: 60,
-    secrets: ["GEMINI_API_KEY"],
-    cors: true
-}, async (request) => {
-    const { description, mealType } = request.data;
-    const apiKey = getGeminiKey();
-    if (!apiKey) throw new HttpsError('failed-precondition', 'API Key missing');
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-        model: "gemini-2.5-flash",
-        systemInstruction: `Du er en JSON-generator. Svar KUN med rå JSON. Ingen tekst, forklaringer eller markdown-formatering. Du er en ekspert på mat og ernæring... Returner JSON. Svar KUN med rå JSON. Ingen tekst før eller etter. Bruk dobbelanførselstegn for alle strenger.`
-    });
-
-    const prompt = `Analyser dette måltidet: "${description}". ${mealType ? `Måltidstype: ${mealType}` : ''}`;
-
-    try {
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        let text = response.text();
-
-        // Finn starten og slutten på JSON-objektet
-        const start = text.indexOf('{');
-        const end = text.lastIndexOf('}');
-
-        if (start === -1 || end === -1) {
-            console.error("Ingen JSON funnet i AI-svar", { raw: text });
-            throw new HttpsError('internal', "AI-en svarte ikke i JSON-format.");
-        }
-
-        let jsonString = text.substring(start, end + 1);
-
-        // 2. KRITISK RENSING: Fjern kontrolltegn og ulovlige linjeskift
-        // Dette fjerner linjeskift inne i tekstfelt som ofte knekker JSON.parse
-        jsonString = jsonString
-            .replace(/[\u0000-\u001F\u007F-\u009F]/g, "") // Fjerner ikke-printbare tegn
-            //.replace(/\n/g, "\\n")  // Bevarer linjeskift som kodesekvenser - disabled as it might double escape if AI is correct
-            .replace(/\r/g, "\\r");
-
-        try {
-            // Prøv å parse den rensede strengen
-            const parsed = JSON.parse(jsonString);
-            return parsed;
-        } catch (e) {
-            console.error("JSON parse feilet etter rensing", {
-                error: e.message,
-                processedText: jsonString.substring(0, 100) + "..."
-            });
-
-            // Fallback: Hvis den fortsatt feiler, prøv en super-enkel rensing
-            try {
-                const superCleaned = text.substring(start, end + 1).replace(/\s+/g, " ");
-                return JSON.parse(superCleaned);
-            } catch (e2) {
-                throw new HttpsError('internal', "AI-formatet var ugyldig. Vennligst prøv igjen.");
-            }
-        }
-    } catch (error) {
-        if (error.code === 'internal') throw error;
-        return formatGeminiError(error);
-    }
-});
 
 // ==========================================
 // 4. DAILY SUMMARY

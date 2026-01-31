@@ -3,16 +3,13 @@ import {
   Home,
   Calendar,
   Plus,
-  Apple,
+
   MessageCircle,
 } from 'lucide-react'
 
 const navItems = [
   { to: '/', icon: Home, label: 'Hjem' },
-  { to: '/plan', icon: Calendar, label: 'Plan' },
-  { to: '/workouts/new', icon: Plus, label: 'Logg', isAction: true },
-  { to: '/nutrition', icon: Apple, label: 'Mat' },
-  { to: '/chat', icon: MessageCircle, label: 'Coach' }
+  { to: '/plan', icon: Calendar, label: 'Plan' }
 ]
 
 export default function Navigation() {

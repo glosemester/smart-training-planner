@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useWorkouts } from '../../hooks/useWorkouts'
-import { useNutrition } from '../../hooks/useNutrition'
+
 import { generateDailySummary } from '../../services/summaryService'
 import { Sparkles, RefreshCw, AlertCircle, TrendingUp, Battery } from 'lucide-react'
 import { startOfDay } from 'date-fns'
@@ -10,33 +10,12 @@ const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'frid
 
 export default function DailySummaryCard({ delay = 0 }) {
   const { workouts, currentPlan } = useWorkouts()
-  const { meals } = useNutrition()
+
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  // Calculate today's nutrition
-  const todaysNutrition = useMemo(() => {
-    const today = startOfDay(new Date())
-    const todaysMeals = meals.filter(meal => {
-      const mealDate = startOfDay(new Date(meal.date))
-      return mealDate.getTime() === today.getTime()
-    })
 
-    if (todaysMeals.length === 0) return null
-
-    const totals = todaysMeals.reduce(
-      (acc, meal) => ({
-        calories: acc.calories + (meal.nutrition?.totals?.calories || 0),
-        protein: acc.protein + (meal.nutrition?.totals?.protein || 0),
-        carbs: acc.carbs + (meal.nutrition?.totals?.carbs || 0),
-        fat: acc.fat + (meal.nutrition?.totals?.fat || 0)
-      }),
-      { calories: 0, protein: 0, carbs: 0, fat: 0 }
-    )
-
-    return { totals }
-  }, [meals.length, meals.map(m => m.id).join(',')])
 
   // Get last workout
   const lastWorkout = workouts[0] || null
@@ -80,7 +59,7 @@ export default function DailySummaryCard({ delay = 0 }) {
     try {
       const data = {
         lastWorkout,
-        todaysNutrition,
+
         weekStats,
         todaysPlannedWorkout
       }

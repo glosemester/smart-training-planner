@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import Header from './Header'
 import Navigation from './Navigation'
 import Sidebar from './Sidebar'
+import FloatingChat from '../chat/FloatingChat'
 
 export default function Layout() {
   return (
@@ -22,6 +23,9 @@ export default function Layout() {
 
         {/* Mobile Navigation */}
         <Navigation />
+
+        {/* Global Floating AI Coach */}
+        <FloatingChat />
       </div>
     </div>
   )

@@ -1,16 +1,20 @@
 import { useState, useRef, useEffect } from 'react'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { sendChatMessage, buildUserContext, STARTER_PROMPTS } from '../../services/chatService'
-import { MessageCircle, Send, Sparkles, User, Bot, Loader, CheckCircle, XCircle } from 'lucide-react'
+import { MessageCircle, Send, Sparkles, User, Bot, Loader, CheckCircle, XCircle, Image as ImageIcon, Brain } from 'lucide-react'
 import ActionConfirmation from './ActionConfirmation'
+import AICoachDashboard from './AICoachDashboard'
 
 export default function AIChat() {
-  const { workouts, currentPlan, plans, getStats, updatePlanSession, addPlanSession, deletePlanSession, updatePlan } = useWorkouts()
+  const { workouts, currentPlan, plans, getStats, updatePlanSession, addPlanSession, deletePlanSession, updatePlan, mentalState } = useWorkouts()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [pendingActions, setPendingActions] = useState(null)
+  const [selectedImage, setSelectedImage] = useState(null)
+  const [showBrain, setShowBrain] = useState(false) // Toggle for AI Dashboard
+  const fileInputRef = useRef(null)
   const messagesEndRef = useRef(null)
 
   // Auto-scroll to bottom when new messages arrive
@@ -18,18 +22,36 @@ export default function AIChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  const handleImageSelect = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        setError('Bildet er for stort. Maks 5MB.')
+        return
+      }
+
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setSelectedImage(reader.result)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
   const handleSendMessage = async (content = input) => {
-    if (!content.trim() || loading) return
+    if ((!content.trim() && !selectedImage) || loading) return
 
     const userMessage = {
       role: 'user',
-      content: content.trim()
+      content: content.trim(),
+      image: selectedImage
     }
 
     // Add user message to chat
     const updatedMessages = [...messages, userMessage]
     setMessages(updatedMessages)
     setInput('')
+    setSelectedImage(null)
     setLoading(true)
     setError(null)
 
@@ -40,7 +62,8 @@ export default function AIChat() {
         workouts,
         currentPlan,
         plans,
-        stats
+        stats,
+        mentalState // Pass mental state to chat context
       })
 
       // Send to AI
@@ -85,10 +108,6 @@ export default function AIChat() {
       }
 
       setError(errorMessage)
-
-      // Add error message to chat for context
-      // setMessages([...updatedMessages, { role: 'assistant', content: '❌ ' + errorMessage }]) 
-      // ^ Deaktivert: Bedre å bare vise feilmeldingen i UI-boksen enn å forsøple chatten
     } finally {
       setLoading(false)
     }
@@ -185,15 +204,31 @@ export default function AIChat() {
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
       {/* Header */}
-      <div className="mb-4">
-        <h1 className="font-heading text-2xl font-bold text-text-primary flex items-center gap-2">
-          <MessageCircle className="text-secondary" />
-          AI Treningscoach
-        </h1>
-        <p className="text-text-secondary mt-1">
-          Chat med din personlige AI-coach om trening, mål og progresjon
-        </p>
+      <div className="mb-4 flex justify-between items-start">
+        <div>
+          <h1 className="font-heading text-2xl font-bold text-text-primary flex items-center gap-2">
+            <MessageCircle className="text-secondary" />
+            AI Treningscoach
+          </h1>
+          <p className="text-text-secondary mt-1">
+            Chat med din personlige AI-coach om trening, mål og progresjon
+          </p>
+        </div>
+
+        {/* Brain Toggle */}
+        <button
+          onClick={() => setShowBrain(!showBrain)}
+          className={`p-2 rounded-xl transition-all ${showBrain ? 'bg-secondary text-black shadow-lg shadow-secondary/20' : 'bg-background-secondary text-text-secondary hover:text-white'}`}
+          title="Show Mental State"
+        >
+          <Brain size={24} />
+        </button>
       </div>
+
+      {/* Mental State Dashboard (Collapsible) */}
+      {showBrain && (
+        <AICoachDashboard mentalState={mentalState} />
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto space-y-4 mb-4">
@@ -259,6 +294,14 @@ export default function AIChat() {
                     : 'bg-background-secondary text-text-primary'
                     }`}
                 >
+                  {message.image && (
+                    <img
+                      src={message.image}
+                      alt="Opplastet bilde"
+                      className="max-w-full rounded-lg mb-2 border border-white/10"
+                      style={{ maxHeight: '200px' }}
+                    />
+                  )}
                   <p className="whitespace-pre-wrap text-sm leading-relaxed">
                     {message.content}
                   </p>
@@ -299,32 +342,65 @@ export default function AIChat() {
       )}
 
       {/* Input */}
-      <div className="flex gap-2">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyPress={handleKeyPress}
-          placeholder="Skriv din melding..."
-          rows={1}
-          className="input flex-1 resize-none"
-          disabled={loading}
-          style={{
-            minHeight: '44px',
-            maxHeight: '120px'
-          }}
-        />
-        <button
-          onClick={() => handleSendMessage()}
-          disabled={!input.trim() || loading}
-          className="btn-primary px-4 flex items-center gap-2"
-          aria-label="Send melding"
-        >
-          {loading ? (
-            <Loader size={20} className="animate-spin" />
-          ) : (
-            <Send size={20} />
-          )}
-        </button>
+      <div className="flex flex-col gap-2">
+        {selectedImage && (
+          <div className="relative inline-block self-start ml-2 p-1 border border-white/10 rounded-lg bg-black/20">
+            <img
+              src={selectedImage}
+              alt="Valgt bilde"
+              className="h-20 rounded shadow-md"
+            />
+            <button
+              onClick={() => setSelectedImage(null)}
+              className="absolute -top-2 -right-2 bg-error text-white rounded-full p-1 shadow-lg hover:scale-110 transition-transform"
+            >
+              <XCircle size={16} />
+            </button>
+          </div>
+        )}
+
+        <div className="flex gap-2 items-end">
+          <input
+            type="file"
+            accept="image/*"
+            ref={fileInputRef}
+            onChange={handleImageSelect}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="btn-secondary px-3 mb-1 h-11 flex items-center justify-center"
+            title="Last opp bilde"
+          >
+            <ImageIcon size={20} />
+          </button>
+
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Skriv din melding..."
+            rows={1}
+            className="input flex-1 resize-none py-3"
+            disabled={loading}
+            style={{
+              minHeight: '44px',
+              maxHeight: '120px'
+            }}
+          />
+          <button
+            onClick={() => handleSendMessage()}
+            disabled={(!input.trim() && !selectedImage) || loading}
+            className="btn-primary px-4 mb-1 h-11 flex items-center justify-center"
+            aria-label="Send melding"
+          >
+            {loading ? (
+              <Loader size={20} className="animate-spin" />
+            ) : (
+              <Send size={20} />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Context indicator */}

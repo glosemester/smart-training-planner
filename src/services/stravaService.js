@@ -182,11 +182,11 @@ export async function getMatchingStravaActivity(userId, sessionDate, sessionType
             console.log('✅ Found matching Strava activity:', matchingActivity.id)
             return {
                 stravaId: matchingActivity.id,
-                distance: matchingActivity.distance / 1000, // km
-                duration: Math.round(matchingActivity.moving_time / 60), // min
+                distance: matchingActivity.distance, // already in km from getRecentActivities
+                duration: matchingActivity.duration, // already in min from getRecentActivities
                 avgHR: matchingActivity.average_heartrate || null,
                 maxHR: matchingActivity.max_heartrate || null,
-                avgPace: formatPaceFromData(matchingActivity.moving_time, matchingActivity.distance),
+                avgPace: matchingActivity.pace, // already formatted in getRecentActivities
                 calories: matchingActivity.kilojoules ? Math.round(matchingActivity.kilojoules * 0.239) : null,
                 elevationGain: matchingActivity.total_elevation_gain || null,
                 avgSpeed: matchingActivity.average_speed ? (matchingActivity.average_speed * 3.6).toFixed(1) : null, // m/s to km/h

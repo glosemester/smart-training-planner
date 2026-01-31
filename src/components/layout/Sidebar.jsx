@@ -3,7 +3,7 @@ import {
     Home,
     Calendar,
     Dumbbell,
-    Apple,
+
     MessageCircle,
     TrendingUp,
     Target,
@@ -18,11 +18,6 @@ import { useTheme } from '../../contexts/ThemeContext'
 const navItems = [
     { to: '/', icon: Home, label: 'Hjem' },
     { to: '/plan', icon: Calendar, label: 'Plan' },
-    { to: '/workouts', icon: Dumbbell, label: 'Økter' },
-    { to: '/nutrition', icon: Apple, label: 'Mat' },
-    { to: '/chat', icon: MessageCircle, label: 'Coach' },
-    { to: '/stats', icon: TrendingUp, label: 'Statistikk' },
-    { to: '/goals', icon: Target, label: 'Mål' },
 ]
 
 export default function Sidebar() {

@@ -1,9 +1,11 @@
 import { lazy, Suspense } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
+import { AnimatePresence } from 'framer-motion'
 import { useAuth } from './hooks/useAuth'
 import LoginScreen from './components/auth/LoginScreen'
 import UpdatePrompt from './components/common/UpdatePrompt'
+import PageTransition from './components/layout/PageTransition'
 
 // Lazy load components for code splitting
 const Layout = lazy(() => import('./components/layout/Layout'))
@@ -17,7 +19,7 @@ const Statistics = lazy(() => import('./components/stats/Statistics'))
 const TrainingCalendar = lazy(() => import('./components/calendar/TrainingCalendar'))
 const HealthSync = lazy(() => import('./components/health/HealthSync'))
 const AIChat = lazy(() => import('./components/chat/AIChat'))
-const NutritionTracker = lazy(() => import('./components/nutrition/NutritionTracker'))
+// const NutritionTracker = lazy(() => import('./components/nutrition/NutritionTracker')) // Removing Pro feature
 const StravaCallback = lazy(() => import('./components/auth/StravaCallback'))
 
 // Loading fallback component
@@ -49,39 +51,42 @@ function ProtectedRoute({ children }) {
 }
 
 function App() {
+  const location = useLocation()
+
   return (
     <>
       <Suspense fallback={<LoadingFallback />}>
-        <Routes>
-          {/* Public routes */}
-          <Route path="/login" element={<LoginScreen />} />
-          <Route path="/strava-callback" element={<StravaCallback />} />
+        <AnimatePresence mode="wait">
+          <Routes location={location} key={location.pathname}>
+            {/* Public routes */}
+            <Route path="/login" element={<PageTransition><LoginScreen /></PageTransition>} />
+            <Route path="/strava-callback" element={<StravaCallback />} />
 
-          {/* Protected routes */}
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Dashboard />} />
-            <Route path="workouts" element={<WorkoutList />} />
-            <Route path="workouts/new" element={<LogWorkout />} />
-            <Route path="workouts/:id" element={<WorkoutDetail />} />
-            <Route path="plan" element={<AIPlanner />} />
-            <Route path="calendar" element={<TrainingCalendar />} />
-            <Route path="goals" element={<GoalSetting />} />
-            <Route path="stats" element={<Statistics />} />
-            <Route path="health" element={<HealthSync />} />
-            <Route path="chat" element={<AIChat />} />
-            <Route path="nutrition" element={<NutritionTracker />} />
-          </Route>
+            {/* Protected routes */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Layout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<PageTransition className="h-full"><Dashboard /></PageTransition>} />
+              <Route path="workouts" element={<PageTransition className="h-full"><WorkoutList /></PageTransition>} />
+              <Route path="workouts/new" element={<PageTransition className="h-full"><LogWorkout /></PageTransition>} />
+              <Route path="workouts/:id" element={<PageTransition className="h-full"><WorkoutDetail /></PageTransition>} />
+              <Route path="plan" element={<PageTransition className="h-full"><AIPlanner /></PageTransition>} />
+              <Route path="calendar" element={<PageTransition className="h-full"><TrainingCalendar /></PageTransition>} />
+              <Route path="goals" element={<PageTransition className="h-full"><GoalSetting /></PageTransition>} />
+              <Route path="stats" element={<PageTransition className="h-full"><Statistics /></PageTransition>} />
+              <Route path="health" element={<PageTransition className="h-full"><HealthSync /></PageTransition>} />
+              <Route path="chat" element={<PageTransition className="h-full"><AIChat /></PageTransition>} />
+            </Route>
 
-          {/* Catch all - redirect to dashboard */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            {/* Catch all - redirect to dashboard */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </AnimatePresence>
       </Suspense>
 
       {/* Toast notifications */}

@@ -23,11 +23,16 @@ export async function sendChatMessage(messages, userContext = null) {
     // Call Firebase function
     const chatFn = httpsCallable(functions, 'chat')
     const result = await chatFn({
+
       messages: messages.map(msg => ({
         role: msg.role,
-        content: msg.content
+        content: msg.content,
+        image: msg.image // Include image data if present
       })),
-      userContext
+      userContext: {
+        ...userContext,
+        mentalState: userContext?.mentalState || null
+      }
     })
 
     return result.data
@@ -82,7 +87,7 @@ function buildExerciseHistory(workouts) {
  * @param {Object} params - Context parameters
  * @returns {Object} Formatted user context
  */
-export function buildUserContext({ workouts = [], currentPlan = null, plans = [], stats = null, goals = null }) {
+export function buildUserContext({ workouts = [], currentPlan = null, plans = [], stats = null, goals = null, mentalState = null }) {
   const context = {}
 
   // 1. OPTIMALISERT TRENINGSHISTORIKK
@@ -143,6 +148,9 @@ export function buildUserContext({ workouts = [], currentPlan = null, plans = []
   // 4. STATISTIKK OG MÅL (Viktigst!)
   if (stats) context.stats = stats
   if (goals) context.goals = goals
+
+  // 5. MENTAL MODEL (AI Thoughts)
+  if (mentalState) context.mentalState = mentalState
 
   return Object.keys(context).length > 0 ? context : null
 }

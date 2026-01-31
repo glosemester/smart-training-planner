@@ -31,10 +31,7 @@ export default function WorkoutList() {
         <h1 className="font-heading text-2xl font-bold text-text-primary">
           Treningsøkter
         </h1>
-        <Link to="/workouts/new" className="btn-primary hover:scale-105 transition-transform">
-          <Plus size={20} />
-          Ny økt
-        </Link>
+
       </div>
 
       {workouts.length > 0 ? (
@@ -42,7 +39,7 @@ export default function WorkoutList() {
           {workouts.map((workout, index) => {
             const type = getWorkoutType(workout.type)
             const date = new Date(workout.date)
-            
+
             return (
               <Link
                 key={workout.id}
@@ -50,7 +47,7 @@ export default function WorkoutList() {
                 className="card flex items-center gap-3 hover:bg-white/5 hover:scale-[1.02] transition-all duration-300 hover:shadow-lg animate-fade-in-up"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
-                <div 
+                <div
                   className="w-12 h-12 rounded-xl flex items-center justify-center text-xl"
                   style={{ backgroundColor: `${type.color}20` }}
                 >
@@ -83,10 +80,7 @@ export default function WorkoutList() {
       ) : (
         <div className="card text-center py-12">
           <p className="text-text-muted mb-4">Ingen treningsøkter registrert</p>
-          <Link to="/workouts/new" className="btn-primary inline-flex">
-            <Plus size={20} />
-            Logg din første økt
-          </Link>
+
         </div>
       )}
     </div>

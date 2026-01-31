@@ -1392,205 +1392,222 @@ function CompleteSessionModal({ session, onSave, onCancel }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-background-card rounded-2xl max-w-md w-full my-8 shadow-xl">
+      <div className="bg-background-elevated rounded-3xl overflow-hidden border border-white/10 shadow-2xl w-full max-w-lg animate-in fade-in zoom-in duration-300">
         {/* Header */}
-        <div className="bg-gradient-to-br from-success/20 to-success/5 border-b border-success/20 p-6">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center text-xl"
-              style={{ backgroundColor: `${type.color}20` }}
-            >
-              {type.icon}
-            </div>
-            <div>
-              <h2 className="font-heading font-bold text-lg text-gray-900 dark:text-text-primary">
-                Marker som gjennomført
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-text-muted">{session.title}</p>
-            </div>
+        <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between bg-white/5">
+          <div>
+            <h3 className="text-xl font-bold text-white mb-1">Fullfør økt</h3>
+            <p className="text-sm text-text-secondary line-clamp-1">{session.activity} - {session.duration} min</p>
           </div>
+          <button onClick={onCancel} className="p-2 hover:bg-white/5 rounded-full transition-colors">
+            <X size={20} className="text-text-muted" />
+          </button>
         </div>
 
-        {/* Strava Import Button */}
-        <div className="px-6 pt-4">
+        {/* Strava Import Section */}
+        <div className="px-6 pt-6">
           <button
             type="button"
             onClick={handleFetchFromStrava}
             disabled={stravaLoading || stravaImported}
-            className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-medium transition-all
+            className={`w-full group relative overflow-hidden flex items-center justify-center gap-3 py-4 rounded-2xl font-bold transition-all
               ${stravaImported
-                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
-                : 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-900/50 border border-orange-200 dark:border-orange-800'
+                ? 'bg-green-500/10 text-green-400 border border-green-500/20 cursor-default'
+                : 'bg-[#FC6100]/10 text-[#FC6100] border border-[#FC6100]/20 hover:bg-[#FC6100]/20 active:scale-[0.98]'
               }`}
           >
             {stravaLoading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
-                Henter fra Strava...
-              </>
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 border-2 border-[#FC6100]/30 border-t-[#FC6100] rounded-full animate-spin" />
+                <span>Henter fra Strava...</span>
+              </div>
             ) : stravaImported ? (
               <>
-                <Check size={18} />
-                Data importert fra Strava
+                <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <Check size={18} className="text-green-400" />
+                </div>
+                <span>Økt hentet fra Strava</span>
               </>
             ) : (
               <>
-                <Activity size={18} />
-                Hent data fra Strava
+                <div className="w-8 h-8 rounded-full bg-[#FC6100]/20 flex items-center justify-center group-hover:bg-[#FC6100]/30 transition-colors">
+                  <img src="https://d3nn82uaxijpm6.cloudfront.net/assets/strava-logo-fc5817d23f38f1929cedc234a9b6c0e86b97b0a7ed90d79708709f1969a84a6a.svg" alt="Strava" className="w-4 h-4" />
+                </div>
+                <span>Hent fra Strava</span>
               </>
             )}
           </button>
+          {!stravaImported && !stravaLoading && (
+            <p className="text-[10px] text-center text-text-muted mt-2 font-medium uppercase tracking-wider">
+              Automatisk utfylling av økten din
+            </p>
+          )}
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Duration */}
-          <div>
-            <label htmlFor="complete-duration" className="input-label">
-              Varighet (minutter) *
-            </label>
-            <input
-              id="complete-duration"
-              type="number"
-              value={formData.duration}
-              onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value) || 0 })}
-              className="input"
-              min="1"
-              required
-            />
-          </div>
-
-          {/* RPE */}
-          <div>
-            <label htmlFor="complete-rpe" className="input-label">
-              RPE (Rate of Perceived Exertion) *
-            </label>
-            <div className="flex items-center gap-3">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            {/* Duration */}
+            <div className="col-span-1">
+              <label htmlFor="complete-duration" className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
+                Varighet (min) *
+              </label>
               <input
-                id="complete-rpe"
-                type="range"
+                id="complete-duration"
+                type="number"
+                value={formData.duration}
+                onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value) || 0 })}
+                className="input bg-background-secondary border-white/5 focus:border-primary/50"
                 min="1"
-                max="10"
-                value={formData.rpe}
-                onChange={(e) => setFormData({ ...formData, rpe: parseInt(e.target.value) })}
-                className="flex-1"
+                required
               />
-              <span className="text-lg font-bold text-primary w-8 text-center">{formData.rpe}</span>
             </div>
-            <div className="flex justify-between text-xs text-text-muted mt-1">
-              <span>Veldig lett</span>
-              <span>Maksimal</span>
+
+            {/* RPE */}
+            <div className="col-span-1">
+              <label htmlFor="complete-rpe" className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
+                Anstrengelse (1-10) *
+              </label>
+              <div className="flex items-center gap-3 bg-background-secondary rounded-xl p-2.5 border border-white/5">
+                <input
+                  id="complete-rpe"
+                  type="range"
+                  min="1"
+                  max="10"
+                  value={formData.rpe}
+                  onChange={(e) => setFormData({ ...formData, rpe: parseInt(e.target.value) })}
+                  className="flex-1 accent-primary"
+                />
+                <span className="text-lg font-bold text-primary w-6 text-center">{formData.rpe}</span>
+              </div>
             </div>
           </div>
 
-          {/* Running-specific fields */}
           {isRunning && (
-            <>
-              <div>
-                <label htmlFor="complete-distance" className="input-label">
-                  Distanse (km)
-                </label>
-                <input
-                  id="complete-distance"
-                  type="number"
-                  step="0.1"
-                  value={formData.distance}
-                  onChange={(e) => setFormData({ ...formData, distance: parseFloat(e.target.value) || 0 })}
-                  className="input"
-                  min="0"
-                />
+            <div className="space-y-6 pt-2 border-t border-white/5">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="complete-distance" className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
+                    Distanse (km)
+                  </label>
+                  <input
+                    id="complete-distance"
+                    type="number"
+                    step="0.01"
+                    value={formData.distance}
+                    onChange={(e) => setFormData({ ...formData, distance: parseFloat(e.target.value) || 0 })}
+                    className="input bg-background-secondary border-white/5 focus:border-primary/50"
+                    min="0"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="complete-pace" className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
+                    Tempo (min/km)
+                  </label>
+                  <input
+                    id="complete-pace"
+                    type="text"
+                    placeholder="5:30"
+                    value={formData.avgPace}
+                    onChange={(e) => setFormData({ ...formData, avgPace: e.target.value })}
+                    className="input bg-background-secondary border-white/5 focus:border-primary/50"
+                  />
+                </div>
               </div>
 
               <div>
-                <label htmlFor="complete-pace" className="input-label">
-                  Gjennomsnittlig fart (min/km)
-                </label>
-                <input
-                  id="complete-pace"
-                  type="text"
-                  placeholder="5:30"
-                  value={formData.avgPace}
-                  onChange={(e) => setFormData({ ...formData, avgPace: e.target.value })}
-                  className="input"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="complete-surface" className="input-label">
+                <label htmlFor="complete-surface" className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
                   Underlag
                 </label>
-                <select
-                  id="complete-surface"
-                  value={formData.surface}
-                  onChange={(e) => setFormData({ ...formData, surface: e.target.value })}
-                  className="input"
-                >
-                  <option value="asphalt">Asfalt</option>
-                  <option value="trail">Sti/terreng</option>
-                  <option value="track">Bane</option>
-                  <option value="treadmill">Tredemølle</option>
-                </select>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'asphalt', label: 'Asfalt' },
+                    { id: 'trail', label: 'Sti' },
+                    { id: 'track', label: 'Bane' },
+                    { id: 'treadmill', label: 'Mølle' }
+                  ].map(s => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, surface: s.id })}
+                      className={`py-2 px-3 rounded-xl text-xs font-medium border transition-all ${formData.surface === s.id
+                        ? 'bg-primary/20 border-primary text-primary'
+                        : 'bg-background-secondary border-white/5 text-text-muted hover:bg-white/5'
+                        }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Heart rate fields */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="complete-avghr" className="input-label">
-                    Snitt puls (bpm)
+                  <label htmlFor="complete-avghr" className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
+                    Snitt puls
                   </label>
-                  <input
-                    id="complete-avghr"
-                    type="number"
-                    value={formData.avgHR}
-                    onChange={(e) => setFormData({ ...formData, avgHR: e.target.value })}
-                    className="input"
-                    placeholder="145"
-                    min="0"
-                    max="250"
-                  />
+                  <div className="relative">
+                    <input
+                      id="complete-avghr"
+                      type="number"
+                      value={formData.avgHR}
+                      onChange={(e) => setFormData({ ...formData, avgHR: e.target.value })}
+                      className="input bg-background-secondary border-white/5 focus:border-primary/50 pr-10"
+                      placeholder="145"
+                      min="0"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-text-muted font-bold">BPM</span>
+                  </div>
                 </div>
                 <div>
-                  <label htmlFor="complete-maxhr" className="input-label">
-                    Maks puls (bpm)
+                  <label htmlFor="complete-maxhr" className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
+                    Maks puls
                   </label>
-                  <input
-                    id="complete-maxhr"
-                    type="number"
-                    value={formData.maxHR}
-                    onChange={(e) => setFormData({ ...formData, maxHR: e.target.value })}
-                    className="input"
-                    placeholder="175"
-                    min="0"
-                    max="250"
-                  />
+                  <div className="relative">
+                    <input
+                      id="complete-maxhr"
+                      type="number"
+                      value={formData.maxHR}
+                      onChange={(e) => setFormData({ ...formData, maxHR: e.target.value })}
+                      className="input bg-background-secondary border-white/5 focus:border-primary/50 pr-10"
+                      placeholder="175"
+                      min="0"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-text-muted font-bold">BPM</span>
+                  </div>
                 </div>
               </div>
-            </>
+            </div>
           )}
 
-          {/* Notes */}
-          <div>
-            <label htmlFor="complete-notes" className="input-label">
+          <div className="pt-2 border-t border-white/5">
+            <label htmlFor="complete-notes" className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
               Notater
             </label>
             <textarea
               id="complete-notes"
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="input resize-none"
-              rows={3}
+              className="input bg-background-secondary border-white/5 focus:border-primary/50 resize-none min-h-[100px]"
               placeholder="Hvordan følte økten seg? Eventuelle notater..."
             />
           </div>
 
-          {/* Actions */}
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onCancel} className="btn-outline flex-1">
+          <div className="flex gap-4 pt-4">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="flex-1 py-4 px-6 rounded-2xl bg-white/5 hover:bg-white/10 text-text-secondary font-bold transition-all border border-white/5"
+            >
               Avbryt
             </button>
-            <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-2">
-              <Check size={18} />
-              Marker som gjennomført
+            <button
+              type="submit"
+              className="flex-[2] py-4 px-6 rounded-2xl bg-primary hover:opacity-90 text-white font-bold transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
+            >
+              <Check size={20} />
+              Fullfør økt
             </button>
           </div>
         </form>

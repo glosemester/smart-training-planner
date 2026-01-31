@@ -16,10 +16,12 @@ import {
   Plus
 } from 'lucide-react'
 import DailySummaryCard from './DailySummaryCard'
+import AICoachWidget from './AICoachWidget'
+import DataHubDashboard from './DataHubDashboard'
 import WeeklyProgress from './WeeklyProgress'
 import WeekCalendarStrip from './WeekCalendarStrip'
+import WeeklyArtSummary from './WeeklyArtSummary'
 import StravaSummaryCard from './StravaSummaryCard'
-import NutritionWidget from './NutritionWidget'
 import VitalGoals from './VitalGoals'
 import GlassCard from '../ui/GlassCard'
 import Button from '../ui/Button'
@@ -120,11 +122,20 @@ export default function Dashboard() {
       {/* 2. Week Calendar Strip */}
       <WeekCalendarStrip />
 
+      {/* 2b. AI Coach Insight (BDI Model) */}
+      <AICoachWidget />
+
       {/* 3. Hero: Daily Summary ("Ready to run today?") */}
       <DailySummaryCard delay={1500} />
 
-      {/* 4. Your Progress (Ring Chart + Stats) */}
-      <WeeklyProgress workouts={workouts} />
+      {/* 4. Data Hub & Progress + Art Section */}
+      <section className="space-y-6">
+        <DataHubDashboard />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <WeeklyProgress workouts={workouts} />
+          <WeeklyArtSummary />
+        </div>
+      </section>
 
       {/* 5. Next Workout */}
       {nextWorkout ? (
@@ -201,21 +212,14 @@ export default function Dashboard() {
           {recentWorkouts.map(workout => (
             <WorkoutMiniCard key={workout.id} workout={workout} />
           ))}
-          <Link to="/workouts/new" className="block">
-            <GlassCard
-              className="border-dashed border-2 border-white/10 bg-transparent flex items-center justify-center gap-2 py-4 group hover:border-primary/50 hover:bg-primary/5 transition-all"
-            >
-              <Plus size={20} className="text-text-muted group-hover:text-primary transition-colors" />
-              <span className="font-medium text-text-secondary group-hover:text-primary transition-colors">Logg økt</span>
-            </GlassCard>
-          </Link>
+
         </div>
       </section>
 
       {/* 7. Integrations & Widgets (Moved to bottom or removed if cluttering? Keeping for functionality) */}
       <div className="grid gap-6">
         <StravaSummaryCard />
-        <NutritionWidget />
+
         <VitalGoals />
       </div>
     </div>
