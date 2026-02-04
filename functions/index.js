@@ -864,6 +864,13 @@ exports.getMetricsHistory = whoopSync.getMetricsHistory;
 const trainingLogic = require('./training/trainingLogic');
 const adaptiveEngine = require('./training/adaptiveEngine');
 
+// ==========================================
+// ANALYTICS & PERFORMANCE TRACKING (FASE 1)
+// ==========================================
+const { PerformanceAnalytics } = require('./analytics/performanceAnalytics');
+const { RecoveryPatternLearning } = require('./analytics/recoveryPatterns');
+const { WorkoutResponseTracker } = require('./analytics/workoutResponse');
+
 /**
  * Generate a periodized training plan using the algorithm.
  * This is an alternative to the AI-based generatePlan.
@@ -1014,6 +1021,154 @@ exports.adjustTodaysWorkout = onCall({
     } catch (error) {
         console.error('Adjust workout error:', error);
         throw new HttpsError('internal', error.message || 'Failed to adjust workout.');
+    }
+});
+
+/**
+ * ==================================================
+ * ANALYTICS & PERFORMANCE INSIGHTS (FASE 1)
+ * ==================================================
+ */
+
+/**
+ * Get athlete's performance analytics
+ */
+exports.getPerformanceAnalytics = onCall({
+    timeoutSeconds: 30,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const userId = request.auth.uid;
+
+    try {
+        const analytics = new PerformanceAnalytics(userId);
+
+        // Get current VDOT and fitness predictions
+        const currentVDOT = await analytics.getCurrentVDOT();
+        const fitnessPrediction = await analytics.predictFitness(16); // 16 week projection
+        const tsb = await analytics.calculateTSB();
+        const monotony = await analytics.calculateMonotony();
+
+        return {
+            currentVDOT,
+            fitnessPrediction,
+            trainingStressBalance: tsb,
+            monotony,
+            experienceLevel: await analytics.assessExperienceLevel()
+        };
+    } catch (error) {
+        console.error('Performance analytics error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to get analytics.');
+    }
+});
+
+/**
+ * Get personalized recovery pattern and recommendations
+ */
+exports.getRecoveryInsights = onCall({
+    timeoutSeconds: 30,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const userId = request.auth.uid;
+
+    try {
+        const recovery = new RecoveryPatternLearning(userId);
+
+        const pattern = await recovery.learnRecoveryPattern();
+        const tomorrowPrediction = await recovery.predictTomorrowReadiness();
+        const trend = await recovery.analyzeRecoveryTrend(7);
+        const recommendation = await recovery.getRecoveryRecommendation();
+
+        // Save pattern to user profile
+        if (pattern.status === 'LEARNED') {
+            await recovery.saveRecoveryPattern();
+        }
+
+        return {
+            pattern,
+            tomorrowPrediction,
+            trend,
+            recommendation
+        };
+    } catch (error) {
+        console.error('Recovery insights error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to get recovery insights.');
+    }
+});
+
+/**
+ * Get workout adherence and effectiveness analysis
+ */
+exports.getWorkoutInsights = onCall({
+    timeoutSeconds: 30,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const userId = request.auth.uid;
+
+    try {
+        const tracker = new WorkoutResponseTracker(userId);
+
+        const adherence = await tracker.analyzeAdherence();
+        const effectiveness = await tracker.measureWorkoutEffectiveness();
+        const frequency = await tracker.calculateOptimalFrequency();
+
+        // Save to user profile
+        await tracker.saveAdherenceProfile();
+
+        return {
+            adherence,
+            effectiveness,
+            optimalFrequency: frequency
+        };
+    } catch (error) {
+        console.error('Workout insights error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to get workout insights.');
+    }
+});
+
+/**
+ * Calculate VDOT from race performance
+ */
+exports.calculateVDOT = onCall({
+    timeoutSeconds: 10,
+    cors: true
+}, async (request) => {
+    const { distanceKm, timeSeconds } = request.data;
+
+    if (!distanceKm || !timeSeconds) {
+        throw new HttpsError('invalid-argument', 'Distance and time are required.');
+    }
+
+    try {
+        const analytics = new PerformanceAnalytics('temp');
+        const vdot = analytics.calculateVDOT(distanceKm, timeSeconds);
+
+        // Also provide race time predictions for this VDOT
+        const predictions = {
+            '5K': analytics.vdotToRaceTime(vdot, 5),
+            '10K': analytics.vdotToRaceTime(vdot, 10),
+            'Half Marathon': analytics.vdotToRaceTime(vdot, 21.1),
+            'Marathon': analytics.vdotToRaceTime(vdot, 42.2)
+        };
+
+        return {
+            vdot: Math.round(vdot * 10) / 10, // Round to 1 decimal
+            predictions
+        };
+    } catch (error) {
+        console.error('VDOT calculation error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to calculate VDOT.');
     }
 });
 
