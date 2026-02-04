@@ -20,11 +20,9 @@ import { fadeInUp, staggerContainer, staggerItem } from '../../utils/animations'
 import { DailySummarySkeleton, WeeklyProgressSkeleton, CardSkeleton } from '../ui/Skeleton'
 import Accordion from '../ui/Accordion'
 import CompactMetricsCard from './CompactMetricsCard'
-import DataHubDashboard from './DataHubDashboard'
 import WeeklyProgress from './WeeklyProgress'
 import WeekCalendarStrip from './WeekCalendarStrip'
 import TodaysWorkout from './TodaysWorkout'
-import HydrationTracker from './HydrationTracker'
 import GamificationWidget from './GamificationWidget'
 import GlassCard from '../ui/GlassCard'
 import Button from '../ui/Button'
@@ -197,7 +195,7 @@ export default function Dashboard() {
         variants={staggerContainer}
         initial="initial"
         animate="animate"
-        className="space-y-6"
+        className="space-y-4"
       >
         {/* Hero: Compact Metrics (Apple Health Style) */}
         <motion.div variants={staggerItem}>
@@ -209,22 +207,12 @@ export default function Dashboard() {
           />
         </motion.div>
 
-        {/* Data Hub - Shown on desktop */}
-        <motion.div variants={staggerItem} className="hidden md:block">
-          <DataHubDashboard />
-        </motion.div>
-
-        {/* Weekly Progress */}
+        {/* Weekly Progress - Compact */}
         <motion.div variants={staggerItem}>
           <WeeklyProgress workouts={workouts} />
         </motion.div>
 
-        {/* Hydration Tracker */}
-        <motion.div variants={staggerItem}>
-          <HydrationTracker />
-        </motion.div>
-
-        {/* Gamification Widget */}
+        {/* Gamification - Compact */}
         <motion.div variants={staggerItem}>
           <GamificationWidget />
         </motion.div>

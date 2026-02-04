@@ -77,8 +77,18 @@ const MetricItem = ({ icon: Icon, label, value, unit, trend, color = '#B9E43C' }
 }
 
 export default function CompactMetricsCard({ readiness, health, weeklyLoad, whoop }) {
+  // Debug logging
+  console.log('📊 CompactMetricsCard Data:', {
+    readiness,
+    health,
+    weeklyLoad,
+    whoop: whoop ? 'Has data' : 'No data',
+    cycles: whoop?.cycles?.records?.length || 0
+  })
+
   // Calculate ring colors based on values
   const getReadinessColor = (score) => {
+    if (!score || score === 0) return '#6B7280' // gray for no data
     if (score >= 67) return '#10B981' // green
     if (score >= 34) return '#F59E0B' // yellow
     return '#EF4444' // red
@@ -91,7 +101,11 @@ export default function CompactMetricsCard({ readiness, health, weeklyLoad, whoo
     return 'stable'
   }
 
-  const recentCycle = whoop?.cycles?.[0]
+  const recentCycle = whoop?.cycles?.records?.[0]
+
+  // Fallback readiness display
+  const displayReadiness = readiness || 0
+  const hasData = readiness && readiness > 0
 
   return (
     <GlassCard className="overflow-hidden">
@@ -108,21 +122,28 @@ export default function CompactMetricsCard({ readiness, health, weeklyLoad, whoo
       {/* Main readiness ring */}
       <div className="flex items-center justify-center mb-6">
         <ProgressRing
-          progress={readiness || 0}
+          progress={displayReadiness}
           size={120}
           strokeWidth={10}
-          color={getReadinessColor(readiness)}
+          color={getReadinessColor(displayReadiness)}
         >
           <div className="text-center">
-            <p className="text-3xl font-bold" style={{ color: getReadinessColor(readiness) }}>
-              {readiness || '-'}
+            <p className="text-3xl font-bold" style={{ color: getReadinessColor(displayReadiness) }}>
+              {displayReadiness}
             </p>
             <p className="text-[10px] text-text-muted uppercase tracking-wider">
-              Readiness
+              {hasData ? 'Readiness' : 'Ingen data'}
             </p>
           </div>
         </ProgressRing>
       </div>
+
+      {/* Debug info - Remove later */}
+      {!hasData && (
+        <div className="mb-4 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-xs text-yellow-400 text-center">
+          Synkroniserer Whoop data...
+        </div>
+      )}
 
       {/* Compact metrics grid */}
       <div className="space-y-1">
