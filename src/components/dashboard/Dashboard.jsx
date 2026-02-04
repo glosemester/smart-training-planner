@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { getFunctions, httpsCallable } from 'firebase/functions'
 import { useAuth } from '../../hooks/useAuth'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { format, differenceInDays } from 'date-fns'
@@ -18,7 +19,7 @@ import {
 import { fadeInUp, staggerContainer, staggerItem } from '../../utils/animations'
 import { DailySummarySkeleton, WeeklyProgressSkeleton, CardSkeleton } from '../ui/Skeleton'
 import Accordion from '../ui/Accordion'
-import DailySummaryCard from './DailySummaryCard'
+import CompactMetricsCard from './CompactMetricsCard'
 import DataHubDashboard from './DataHubDashboard'
 import WeeklyProgress from './WeeklyProgress'
 import WeekCalendarStrip from './WeekCalendarStrip'
@@ -27,6 +28,7 @@ import HydrationTracker from './HydrationTracker'
 import GamificationWidget from './GamificationWidget'
 import GlassCard from '../ui/GlassCard'
 import Button from '../ui/Button'
+import { useMetrics } from '../../contexts/MetricsContext'
 
 // Lazy load below-fold components for better performance
 const StravaSummaryCard = lazy(() => import('./StravaSummaryCard'))
@@ -36,8 +38,28 @@ const VitalGoals = lazy(() => import('./VitalGoals'))
 export default function Dashboard() {
   const { userProfile } = useAuth()
   const { workouts, currentPlan, loading } = useWorkouts()
+  const { readiness, health, weeklyLoad, whoop } = useMetrics()
+  const functions = getFunctions()
 
   const firstName = userProfile?.displayName?.split(' ')[0] || 'Løper'
+
+  // Sync Whoop metrics on mount if connected
+  useEffect(() => {
+    const syncWhoopData = async () => {
+      if (userProfile?.integrations?.whoop?.isConnected) {
+        try {
+          const syncWhoopMetrics = httpsCallable(functions, 'syncWhoopMetrics')
+          await syncWhoopMetrics()
+          console.log('✅ Whoop data synced successfully')
+        } catch (err) {
+          console.error('Failed to sync Whoop data:', err)
+          // Silent fail - don't block UI
+        }
+      }
+    }
+
+    syncWhoopData()
+  }, [userProfile?.integrations?.whoop?.isConnected, functions])
 
   // Handle OAuth Callback (Strava or Whoop)
   useEffect(() => {
@@ -177,13 +199,18 @@ export default function Dashboard() {
         animate="animate"
         className="space-y-6"
       >
-        {/* Hero: Daily Summary */}
+        {/* Hero: Compact Metrics (Apple Health Style) */}
         <motion.div variants={staggerItem}>
-          <DailySummaryCard delay={1500} />
+          <CompactMetricsCard
+            readiness={readiness}
+            health={health}
+            weeklyLoad={weeklyLoad}
+            whoop={whoop}
+          />
         </motion.div>
 
-        {/* Data Hub */}
-        <motion.div variants={staggerItem}>
+        {/* Data Hub - Shown on desktop */}
+        <motion.div variants={staggerItem} className="hidden md:block">
           <DataHubDashboard />
         </motion.div>
 

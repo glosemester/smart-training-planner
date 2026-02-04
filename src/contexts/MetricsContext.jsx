@@ -62,6 +62,11 @@ export function MetricsProvider({ children }) {
 
   // Unified readiness score (Whoop recovery OR calculated estimate)
   const readiness = useMemo(() => {
+    // FIX: Whoop API v2 - recovery is embedded in cycle.recovery
+    if (whoopData?.cycles?.records?.[0]?.recovery?.score) {
+      return whoopData.cycles.records[0].recovery.score.recovery_score
+    }
+    // Also check old recovery structure for backwards compatibility
     if (whoopData?.recovery?.records?.[0]) {
       return whoopData.recovery.records[0].score?.recovery_score
     }
@@ -77,7 +82,16 @@ export function MetricsProvider({ children }) {
 
   // Health metrics from Whoop or defaults
   const health = useMemo(() => {
-    const recentRecoveries = whoopData?.recovery?.records || []
+    // FIX: Whoop API v2 - recovery data from cycles
+    const recentCycles = whoopData?.cycles?.records || []
+    const recentRecoveries = recentCycles
+      .map(c => c.recovery)
+      .filter(Boolean)
+
+    // Also check old recovery structure for backwards compatibility
+    if (recentRecoveries.length === 0 && whoopData?.recovery?.records) {
+      recentRecoveries.push(...whoopData.recovery.records)
+    }
 
     // Calculate 24-hour averages for stability
     if (recentRecoveries.length > 0) {
