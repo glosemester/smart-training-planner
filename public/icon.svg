@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" fill="#060606" rx="90"/>
+
+  <!-- Gradient for 3D effect -->
+  <defs>
+    <linearGradient id="primaryGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#B9E43C;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#B9E43C;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#9BCF2C;stop-opacity:1" />
+    </linearGradient>
+
+    <!-- Shadow -->
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#B9E43C" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- RC Badge with rounded square background -->
+  <rect x="106" y="106" width="300" height="300" rx="60" fill="url(#primaryGradient)" filter="url(#shadow)"/>
+
+  <!-- RC Text -->
+  <text x="256" y="310" font-family="'Inter', 'Outfit', sans-serif" font-size="160" font-weight="800" fill="#060606" text-anchor="middle">RC</text>
+</svg>

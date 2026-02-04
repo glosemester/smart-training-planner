@@ -1,30 +1,37 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect, lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
 import { useWorkouts } from '../../hooks/useWorkouts'
-import { getWorkoutType } from '../../data/workoutTypes'
-import { format, isToday, startOfWeek, endOfWeek, differenceInDays } from 'date-fns'
+import { format, differenceInDays } from 'date-fns'
 import { nb } from 'date-fns/locale'
+import { WhoopService } from '../../services/WhoopService'
 import {
   Calendar,
   Clock,
   MapPin,
-  ChevronRight,
   Flame,
   Activity,
   ArrowRight,
   Plus
 } from 'lucide-react'
+import { fadeInUp, staggerContainer, staggerItem } from '../../utils/animations'
+import { DailySummarySkeleton, WeeklyProgressSkeleton, CardSkeleton } from '../ui/Skeleton'
+import Accordion from '../ui/Accordion'
 import DailySummaryCard from './DailySummaryCard'
-import AICoachWidget from './AICoachWidget'
 import DataHubDashboard from './DataHubDashboard'
 import WeeklyProgress from './WeeklyProgress'
 import WeekCalendarStrip from './WeekCalendarStrip'
-import WeeklyArtSummary from './WeeklyArtSummary'
-import StravaSummaryCard from './StravaSummaryCard'
-import VitalGoals from './VitalGoals'
+import TodaysWorkout from './TodaysWorkout'
+import HydrationTracker from './HydrationTracker'
+import GamificationWidget from './GamificationWidget'
 import GlassCard from '../ui/GlassCard'
 import Button from '../ui/Button'
+
+// Lazy load below-fold components for better performance
+const StravaSummaryCard = lazy(() => import('./StravaSummaryCard'))
+const WhoopSummaryCard = lazy(() => import('./WhoopSummaryCard'))
+const VitalGoals = lazy(() => import('./VitalGoals'))
 
 export default function Dashboard() {
   const { userProfile } = useAuth()
@@ -32,6 +39,32 @@ export default function Dashboard() {
 
   const firstName = userProfile?.displayName?.split(' ')[0] || 'Løper'
 
+  // Handle OAuth Callback (Strava or Whoop)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const state = params.get('state'); // Whoop uses state
+    const scope = params.get('scope'); // Strava uses scope
+
+    if (code && state) {
+      // Assume Whoop if state is present (Strava also has state but we only set it for Whoop currently)
+      // Or check if state matches our hex pattern.
+      // For now, let's try Whoop login if state is present.
+      const handleWhoopCallback = async () => {
+        try {
+          await WhoopService.completeLogin(code, state);
+          // Clear URL parameters
+          window.history.replaceState({}, document.title, "/");
+          // Optional: Trigger a reload or user profile update to reflect new connection
+          window.location.reload();
+        } catch (err) {
+          console.error("Whoop Connection Failed:", err);
+          alert("Failed to connect Whoop. See console.");
+        }
+      };
+      handleWhoopCallback();
+    }
+  }, []);
 
 
   // Neste planlagte økt
@@ -58,8 +91,6 @@ export default function Dashboard() {
     }
     return null
   }, [currentPlan?.id, currentPlan?.sessions?.length])
-
-  const recentWorkouts = workouts.slice(0, 3)
 
   // Calculate Streak
   const currentStreak = useMemo(() => {
@@ -93,14 +124,29 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="space-y-6 pb-24">
+        {/* Header Skeleton */}
+        <div className="flex items-end justify-between px-1">
+          <div className="h-10 w-48 bg-white/10 rounded animate-shimmer" />
+          <div className="h-8 w-16 bg-white/10 rounded-full animate-shimmer" />
+        </div>
+
+        {/* Cards Skeleton */}
+        <DailySummarySkeleton />
+        <CardSkeleton />
+        <WeeklyProgressSkeleton />
+        <CardSkeleton />
       </div>
     )
   }
 
   return (
-    <div className="space-y-6 animate-slide-up pb-24">
+    <motion.div
+      variants={fadeInUp}
+      initial="initial"
+      animate="animate"
+      className="space-y-6 pb-24"
+    >
       {/* 1. Header (Minimalist) */}
       <div className="flex items-end justify-between px-1">
         <div>
@@ -120,150 +166,138 @@ export default function Dashboard() {
       </div>
 
       {/* 2. Week Calendar Strip */}
-      <WeekCalendarStrip />
+      <motion.div variants={fadeInUp}>
+        <WeekCalendarStrip />
+      </motion.div>
 
-      {/* 2b. AI Coach Insight (BDI Model) */}
-      <AICoachWidget />
-
-      {/* 3. Hero: Daily Summary ("Ready to run today?") */}
-      <DailySummaryCard delay={1500} />
-
-      {/* 4. Data Hub & Progress + Art Section */}
-      <section className="space-y-6">
-        <DataHubDashboard />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <WeeklyProgress workouts={workouts} />
-          <WeeklyArtSummary />
-        </div>
-      </section>
-
-      {/* 5. Next Workout */}
-      {nextWorkout ? (
-        <section>
-          <div className="flex items-center justify-between px-1 mb-3">
-            <h2 className="text-lg font-semibold text-text-primary">Neste økt</h2>
-            <Link to="/plan" className="text-xs text-primary hover:text-primary-light font-medium uppercase tracking-wider">
-              Åpne plan
-            </Link>
-          </div>
-          <Link to="/plan" className="block group">
-            <GlassCard className="relative overflow-hidden group-hover:shadow-glow-primary transition-all duration-300 border-primary/20 bg-background-surface/60">
-              {/* Highlight gradient */}
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-accent opacity-80" />
-
-              <div className="relative z-10">
-                <div className="flex justify-between items-start mb-4">
-                  <div className={`px-3 py-1 rounded-full text-xs font-semibold backdrop-blur-md border border-white/5 
-                    ${nextWorkout.isToday
-                      ? 'bg-primary/20 text-primary border-primary/20'
-                      : 'bg-white/5 text-text-secondary'
-                    }`}>
-                    {nextWorkout.isToday ? 'I dag' : nextWorkout.isTomorrow ? 'I morgen' : format(new Date().setDate(new Date().getDate() + nextWorkout.daysAway), 'EEEE', { locale: nb })}
-                  </div>
-
-                  <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                    <ArrowRight size={18} className="text-text-muted group-hover:text-primary" />
-                  </div>
-                </div>
-
-                <h3 className="text-xl font-bold mb-2 text-text-primary">{nextWorkout.title}</h3>
-                <p className="text-text-secondary text-sm mb-5 line-clamp-1">{nextWorkout.description}</p>
-
-                <div className="flex gap-3">
-                  <div className="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5">
-                    <Clock size={14} className="text-text-muted" />
-                    <span className="font-medium text-sm text-text-primary">{nextWorkout.duration_minutes} min</span>
-                  </div>
-                  {nextWorkout.details?.distance_km && (
-                    <div className="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5">
-                      <MapPin size={14} className="text-text-muted" />
-                      <span className="font-medium text-sm text-text-primary">{nextWorkout.details.distance_km} km</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Decorative Glow */}
-              <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
-            </GlassCard>
-          </Link>
-        </section>
-      ) : (
-        <section>
-          <GlassCard className="flex flex-col items-center justify-center py-8 text-center border-dashed border-2 border-white/5 bg-transparent">
-            <Calendar className="text-text-muted mb-3 opacity-50" size={32} />
-            <p className="text-text-secondary font-medium mb-4">Ingen aktiv plan</p>
-            <Link to="/plan">
-              <Button size="sm" variant="outline">Lag ny plan</Button>
-            </Link>
-          </GlassCard>
-        </section>
-      )}
-
-      {/* 6. Recent Workouts */}
-      <section>
-        <div className="flex items-center justify-between px-1 mb-3">
-          <h2 className="text-lg font-semibold text-text-primary">Nylige økter</h2>
-          <Link to="/workouts" className="text-xs text-primary hover:text-primary-light font-medium uppercase tracking-wider">
-            Se alle
-          </Link>
-        </div>
-        <div className="space-y-3">
-          {recentWorkouts.map(workout => (
-            <WorkoutMiniCard key={workout.id} workout={workout} />
-          ))}
-
-        </div>
-      </section>
-
-      {/* 7. Integrations & Widgets (Moved to bottom or removed if cluttering? Keeping for functionality) */}
-      <div className="grid gap-6">
-        <StravaSummaryCard />
-
-        <VitalGoals />
-      </div>
-    </div>
-  )
-}
-
-function WorkoutMiniCard({ workout }) {
-  const type = getWorkoutType(workout.type)
-  const date = new Date(workout.date)
-
-  return (
-    <Link to={`/workouts/${workout.id}`}>
-      <GlassCard
-        className="flex items-center gap-4 group"
-        hoverEffect
+      {/* 3 & 4. Cards with Stagger Animation */}
+      <motion.div
+        variants={staggerContainer}
+        initial="initial"
+        animate="animate"
+        className="space-y-6"
       >
-        <div
-          className="w-12 h-12 rounded-xl flex items-center justify-center text-lg flex-shrink-0 shadow-inner"
-          style={{ backgroundColor: `${type.color}15`, color: type.color }}
-        >
-          {type.icon}
-        </div>
-        <div className="flex-1 min-w-0">
-          <h4 className="font-semibold text-text-primary truncate group-hover:text-primary transition-colors">
-            {workout.title || type.name}
-          </h4>
-          <div className="flex items-center gap-3 text-xs text-text-muted mt-1">
-            <span>{isToday(date) ? 'I dag' : format(date, 'd. MMM', { locale: nb })}</span>
-            {workout.duration && (
-              <>
-                <span className="w-1 h-1 rounded-full bg-white/10" />
-                <span>{workout.duration} min</span>
-              </>
-            )}
-            {workout.running?.distance && (
-              <>
-                <span className="w-1 h-1 rounded-full bg-white/10" />
-                <span>{workout.running.distance} km</span>
-              </>
-            )}
-          </div>
-        </div>
-        <ChevronRight size={18} className="text-white/10 group-hover:text-primary transition-colors" />
-      </GlassCard>
-    </Link>
+        {/* Hero: Daily Summary */}
+        <motion.div variants={staggerItem}>
+          <DailySummaryCard delay={1500} />
+        </motion.div>
+
+        {/* Data Hub */}
+        <motion.div variants={staggerItem}>
+          <DataHubDashboard />
+        </motion.div>
+
+        {/* Weekly Progress */}
+        <motion.div variants={staggerItem}>
+          <WeeklyProgress workouts={workouts} />
+        </motion.div>
+
+        {/* Hydration Tracker */}
+        <motion.div variants={staggerItem}>
+          <HydrationTracker />
+        </motion.div>
+
+        {/* Gamification Widget */}
+        <motion.div variants={staggerItem}>
+          <GamificationWidget />
+        </motion.div>
+
+        {/* Today's Workout (with Whoop adaptation) or Next Workout */}
+        <motion.div variants={staggerItem}>
+          {nextWorkout ? (
+            nextWorkout.isToday ? (
+              <TodaysWorkout workout={nextWorkout} />
+            ) : (
+              <section>
+                <div className="flex items-center justify-between px-1 mb-3">
+                  <h2 className="text-lg font-semibold text-text-primary">Neste økt</h2>
+                  <Link to="/plan" className="text-xs text-primary hover:text-primary-light font-medium uppercase tracking-wider">
+                    Åpne plan
+                  </Link>
+                </div>
+                <Link to="/plan" className="block group">
+                  <GlassCard className="relative overflow-hidden group-hover:shadow-glow-primary transition-all duration-300 border-primary/20 bg-background-surface/60">
+                    {/* Highlight gradient */}
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-accent opacity-80" />
+
+                    <div className="relative z-10">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="px-3 py-1 rounded-full text-xs font-semibold bg-white/5 text-text-secondary backdrop-blur-md border border-white/5">
+                          {nextWorkout.isTomorrow ? 'I morgen' : format(new Date().setDate(new Date().getDate() + nextWorkout.daysAway), 'EEEE', { locale: nb })}
+                        </div>
+
+                        <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                          <ArrowRight size={18} className="text-text-muted group-hover:text-primary" />
+                        </div>
+                      </div>
+
+                      <h3 className="text-xl font-bold mb-2 text-text-primary">{nextWorkout.title}</h3>
+                      <p className="text-text-secondary text-sm mb-5 line-clamp-1">{nextWorkout.description}</p>
+
+                      <div className="flex gap-3">
+                        <div className="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5">
+                          <Clock size={14} className="text-text-muted" />
+                          <span className="font-medium text-sm text-text-primary">{nextWorkout.duration_minutes} min</span>
+                        </div>
+                        {nextWorkout.details?.distance_km && (
+                          <div className="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5">
+                            <MapPin size={14} className="text-text-muted" />
+                            <span className="font-medium text-sm text-text-primary">{nextWorkout.details.distance_km} km</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Decorative Glow */}
+                    <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+                  </GlassCard>
+                </Link>
+              </section>
+            )
+          ) : (
+            <section>
+              <GlassCard className="flex flex-col items-center justify-center py-8 text-center border-dashed border-2 border-white/5 bg-transparent">
+                <Calendar className="text-text-muted mb-3 opacity-50" size={32} />
+                <p className="text-text-secondary font-medium mb-4">Ingen aktiv plan</p>
+                <Link to="/plan">
+                  <Button size="sm" variant="outline">Lag ny plan</Button>
+                </Link>
+              </GlassCard>
+            </section>
+          )}
+        </motion.div>
+      </motion.div>
+
+      {/* Collapsible Sections - Integrations (Lazy Loaded) */}
+      <div className="space-y-4">
+        <Suspense fallback={<CardSkeleton />}>
+          <Accordion
+            title="Strava Aktiviteter"
+            icon={Activity}
+            defaultOpen={false}
+          >
+            <div className="pt-4">
+              <StravaSummaryCard />
+            </div>
+          </Accordion>
+        </Suspense>
+
+        <Suspense fallback={<CardSkeleton />}>
+          <Accordion
+            title="Whoop Recovery"
+            icon={Activity}
+            defaultOpen={false}
+          >
+            <div className="pt-4">
+              <WhoopSummaryCard />
+            </div>
+          </Accordion>
+        </Suspense>
+
+        <Suspense fallback={<CardSkeleton />}>
+          <VitalGoals />
+        </Suspense>
+      </div>
+    </motion.div>
   )
 }

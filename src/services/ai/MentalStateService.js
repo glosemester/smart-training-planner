@@ -30,7 +30,7 @@ class MentalStateService {
     }
 
     // --- 1. BELIEFS: What is true about the world/user? ---
-    updateBeliefs({ stats, recentWorkouts, currentPlan, goals }) {
+    updateBeliefs({ stats, recentWorkouts, currentPlan, goals, whoop, currentPhase }) {
         const { acuteLoad, chronicLoad, totalWorkouts } = stats;
 
         // Calculate Fatigue/Load Ratio (simplified TSB - Training Stress Balance)
@@ -42,27 +42,51 @@ class MentalStateService {
             return diff < 7 * 24 * 60 * 60 * 1000;
         }).length;
 
-        // Calculate Adherence (Real Logic)
-        let adherence = 0.8; // Default fallback
+        // Calculate Adherence
+        let adherence = 0.8;
         if (currentPlan && currentPlan.sessions) {
-            const sessionsTillNow = currentPlan.sessions.filter(s => {
-                // Include sessions that are today or in the past
-                const sessionDate = new Date(); // In real app, match session day to date
-                return !s.isFuture; // Simplified assumption: 'completed' flag or similar needed in real Plan object
-            }).length || 1;
-
-            // For now, let's look at completed sessions vs total planned sessions
             const completed = currentPlan.sessions.filter(s => s.completed).length;
             const total = currentPlan.sessions.length;
             if (total > 0) adherence = completed / total;
         }
 
-        // Check for upcoming race in the next 14 days
+        // Check for upcoming race
         const hasUpcomingRace = goals ? goals.some(g => {
             if (g.type !== 'race' || !g.date) return false;
             const daysUntil = (new Date(g.date) - new Date()) / (1000 * 60 * 60 * 24);
             return daysUntil >= 0 && daysUntil <= 14;
         }) : false;
+
+        // -- WHOOP ANALYSIS --
+        let whoopState = {
+            hasPoorRecovery: false,
+            hasGoodRecovery: false,
+            hasPoorSleep: false,
+            strainHigh: false
+        };
+
+        if (whoop) {
+            // Recovery (0-100)
+            const recovery = whoop.recoveryScore || 0;
+            whoopState.hasPoorRecovery = recovery < 33;
+            whoopState.hasGoodRecovery = recovery > 66;
+
+            // Sleep Performance (0-100)
+            const sleep = whoop.sleepPerformance || 0;
+            whoopState.hasPoorSleep = sleep < 70;
+
+            // High strain warning
+            whoopState.strainHigh = (whoop.strain || 0) > 18;
+        }
+
+        // -- PHASE AWARENESS --
+        // Training phases affect how we interpret other signals
+        const phaseState = {
+            inBasePhase: currentPhase === 'base',
+            inBuildPhase: currentPhase === 'build',
+            inPeakPhase: currentPhase === 'peak',
+            inTaperPhase: currentPhase === 'taper'
+        };
 
         this.beliefs = {
             hasHighFatigue: loadRatio > 1.3,
@@ -72,6 +96,9 @@ class MentalStateService {
             isReturningFromBreak: totalWorkouts > 0 && workoutsLastWeek === 0,
             hasUpcomingRace: hasUpcomingRace,
             hasLowAdherence: adherence < 0.5,
+            currentPhase: currentPhase || null,
+            ...whoopState,
+            ...phaseState
         };
     }
 
@@ -79,25 +106,47 @@ class MentalStateService {
     updateDesires() {
         this.desires = [];
 
-        // Hierarchy of Needs (Desires)
+        // Hierarchy of Needs
 
-        // Safety First
-        if (this.beliefs.isOverTraining || this.beliefs.hasHighFatigue) {
+        // 1. Safety / Physical State (Highest Priority)
+        // If Whoop says you're wrecked, listen to it regardless of training load
+        if (this.beliefs.hasPoorRecovery || this.beliefs.isOverTraining) {
+            this.desires.push('Deep Recovery'); // Stronger than just "Prevent Injury"
+        } else if (this.beliefs.hasHighFatigue || this.beliefs.hasPoorSleep) {
             this.desires.push('Prevent Injury');
             this.desires.push('Reduce Fatigue');
         }
 
-        if (this.beliefs.hasUpcomingRace) {
+        // 2. Phase-specific desires
+        if (this.beliefs.inTaperPhase) {
+            // In taper, we ALWAYS prioritize rest even if recovery is green
             this.desires.push('Prepare for Race');
+            this.desires.push('Maintain Sharpness');
+            // Remove any push desires
+        } else if (this.beliefs.hasUpcomingRace) {
+            this.desires.push('Prepare for Race');
+        } else if (this.beliefs.inPeakPhase) {
+            // Peak phase: higher tolerance for fatigue
+            if (!this.beliefs.hasPoorRecovery) {
+                this.desires.push('Maximize Performance');
+            }
+        } else if (this.beliefs.inBuildPhase) {
+            // Build phase: push intensity when recovered
+            if (this.beliefs.hasGoodRecovery) {
+                this.desires.push('Build Intensity');
+            }
         }
 
-        // Consistency second
-        if (!this.beliefs.isConsistent && !this.beliefs.hasHighFatigue && !this.beliefs.hasUpcomingRace) {
+        // 3. Consistency (not during taper)
+        if (!this.beliefs.isConsistent && !this.beliefs.hasHighFatigue &&
+            !this.beliefs.hasPoorRecovery && !this.beliefs.inTaperPhase) {
             this.desires.push('Re-establish Routine');
         }
 
-        // Performance third
-        if (this.beliefs.isConsistent && !this.beliefs.hasHighFatigue) {
+        // 4. Performance (not during taper)
+        // If we have Good Recovery, we WANT to push
+        if ((this.beliefs.isConsistent || this.beliefs.hasGoodRecovery) &&
+            !this.beliefs.hasHighFatigue && !this.beliefs.inTaperPhase) {
             this.desires.push('Improve Fitness');
             this.desires.push('Maintain Adherence');
         }
@@ -115,45 +164,97 @@ class MentalStateService {
         // Map Desires to Actionable Intentions
         this.desires.forEach(desire => {
             switch (desire) {
+                case 'Deep Recovery':
+                    this.intentions.push({ type: 'REST_URGENT', label: 'Rest Day Needed', phase: this.beliefs.currentPhase });
+                    break;
                 case 'Prevent Injury':
                 case 'Reduce Fatigue':
-                    this.intentions.push({ type: 'REST', label: 'Suggest Recovery' });
+                    this.intentions.push({ type: 'REST', label: 'Suggest Recovery', phase: this.beliefs.currentPhase });
                     break;
                 case 'Prepare for Race':
-                    this.intentions.push({ type: 'TAPER', label: 'Race Prep Mode' });
+                    this.intentions.push({ type: 'TAPER', label: 'Race Prep Mode', phase: this.beliefs.currentPhase });
+                    break;
+                case 'Maintain Sharpness':
+                    this.intentions.push({ type: 'SHARPEN', label: 'Stay Sharp', phase: 'taper' });
+                    break;
+                case 'Maximize Performance':
+                    this.intentions.push({ type: 'PEAK_PUSH', label: 'Peak Performance', phase: 'peak' });
+                    break;
+                case 'Build Intensity':
+                    this.intentions.push({ type: 'BUILD', label: 'Build Phase', phase: 'build' });
                     break;
                 case 'Re-establish Routine':
-                    this.intentions.push({ type: 'MOTIVATE', label: 'Encourage Small Step' });
+                    this.intentions.push({ type: 'MOTIVATE', label: 'Encourage Small Step', phase: this.beliefs.currentPhase });
                     break;
                 case 'Improve Fitness':
-                    this.intentions.push({ type: 'PUSH', label: 'Optimize Intensity' });
+                    // If good recovery, suggest intensity
+                    if (this.beliefs.hasGoodRecovery) {
+                        this.intentions.push({ type: 'PUSH_HARD', label: 'Optimize Intensity', phase: this.beliefs.currentPhase });
+                    } else {
+                        this.intentions.push({ type: 'PUSH', label: 'Build Fitness', phase: this.beliefs.currentPhase });
+                    }
                     break;
                 case 'Stay Active':
                 default:
-                    this.intentions.push({ type: 'MAINTAIN', label: 'Keep Going' });
+                    this.intentions.push({ type: 'MAINTAIN', label: 'Keep Going', phase: this.beliefs.currentPhase });
                     break;
             }
         });
     }
 
-    // Generate human-readable advice based on the primary intention
+    // Generate human-readable advice
     generateAdvice() {
+        // Prioritize the top intention
         const primary = this.intentions[0];
-        if (!primary) return "Keep tracking your workouts!";
+        if (!primary) return "Hold oversikt over treningene dine!";
+
+        const { hasPoorRecovery, hasPoorSleep, hasGoodRecovery, currentPhase, strainHigh } = this.beliefs;
 
         switch (primary.type) {
+            case 'REST_URGENT':
+                if (hasPoorRecovery) return "Whoop viser kritisk lav restitusjon. Ta en fullstendig hviledag for å komme tilbake sterkere.";
+                return "Kroppen din viser tegn på overtrening. Hvile er dagens viktigste trening.";
             case 'REST':
-                return "Your training load is spiking. Consider a light recovery session or a rest day to absorb the training.";
+                if (hasPoorSleep) return "Søvnytelsen har vært lav. Vurder en lettere økt eller tidlig kveld.";
+                if (strainHigh) return "Høy akkumulert belastning. En rolig restitusjonøkt er bedre enn å presse i dag.";
+                return "Tretthet bygger seg opp. En lett restitusjonøkt gir mer enn å slite seg ut i dag.";
             case 'TAPER':
-                return "Race day is approaching! Focus on sleep and easy details. Trust the training you've already done.";
+                return "Konkurransedagen nærmer seg! Fokuser på søvn og lette detaljer. Stol på treningen du har lagt ned.";
+            case 'SHARPEN':
+                return "Taper-fase: Hold deg skarp med korte, raske intervaller. Volum ned, kvalitet opp.";
+            case 'PEAK_PUSH':
+                return "Peak-fase: Nå gjelder det! Høy intensitet i dag for å toppe formen.";
+            case 'BUILD':
+                return "Build-fase: Tid for å øke intensiteten. Terskler og tempoarbeid bygger fart.";
             case 'MOTIVATE':
-                return "It's been a quiet week. Let's try to get just 20 minutes in today to get back on track!";
+                return "Det har vært en rolig uke. La oss prøve å få inn bare 20 minutter i dag for å komme i gang igjen!";
+            case 'PUSH_HARD':
+                if (hasGoodRecovery) return "Du er i toppform (Grønn Recovery)! Dette er dagen for det harde intervallpasset.";
+                return "Restitusjon er bra. Gi gass i dag!";
             case 'PUSH':
-                return "Consistency is looking great! You're ready for that interval session in your plan.";
+                return "Bra konsistens. Du bygger solid form. Hold deg til planen.";
             case 'MAINTAIN':
             default:
-                return "You're doing well. Stick to the plan.";
+                return "Du gjør det bra. Jevn progresjon er målet.";
         }
+    }
+
+    // Get phase-specific context for AI chat
+    getPhaseContext() {
+        const phase = this.beliefs.currentPhase;
+        if (!phase) return null;
+
+        const phaseDescriptions = {
+            base: 'Base-fase: Fokus på aerob grunnlag med høyt volum og lav intensitet. 80/20-prinsippet gjelder.',
+            build: 'Build-fase: Økende intensitet med terskel- og tempoarbeid. Fortsatt respekter restitusjon.',
+            peak: 'Peak-fase: Maksimal spesifikk trening. Høy belastning, men lytt til kroppen.',
+            taper: 'Taper-fase: Volum ned 30-50%, behold intensitet. Hvile er like viktig som trening nå.'
+        };
+
+        return {
+            phase,
+            description: phaseDescriptions[phase] || 'Generell treningsperiode.'
+        };
     }
 }
 

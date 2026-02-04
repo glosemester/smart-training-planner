@@ -3,13 +3,16 @@ import {
   Home,
   Calendar,
   Plus,
-
+  BarChart3,
   MessageCircle,
 } from 'lucide-react'
 
 const navItems = [
   { to: '/', icon: Home, label: 'Hjem' },
-  { to: '/plan', icon: Calendar, label: 'Plan' }
+  { to: '/plan', icon: Calendar, label: 'Plan' },
+  { to: '/workouts/new', icon: Plus, label: 'Logg', isAction: true },
+  { to: '/stats', icon: BarChart3, label: 'Stats' },
+  { to: '/chat', icon: MessageCircle, label: 'Coach' }
 ]
 
 export default function Navigation() {
@@ -17,12 +20,9 @@ export default function Navigation() {
 
   return (
     <nav
-      className="lg:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-auto max-w-[90vw]"
-      style={{
-        paddingBottom: 'env(safe-area-inset-bottom)'
-      }}
+      className="lg:hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-auto max-w-[95vw] safe-bottom"
     >
-      <div className="flex items-center gap-1 p-2 rounded-[2rem] bg-background-surface/80 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50">
+      <div className="flex items-center gap-1 px-3 py-2 rounded-[2rem] bg-surface/95 backdrop-blur-2xl border border-white/10 shadow-2xl shadow-black/60">
         {navItems.map(({ to, icon: Icon, label, isAction }) => {
           const isActive = location.pathname === to ||
             (to !== '/' && location.pathname.startsWith(to) && to !== '/workouts/new')
@@ -32,10 +32,10 @@ export default function Navigation() {
               <NavLink
                 key={to}
                 to={to}
-                className="mx-2"
+                className="mx-1"
               >
-                <div className="w-12 h-12 rounded-full bg-primary text-white shadow-lg shadow-primary/40 flex items-center justify-center transform transition-all duration-200 active:scale-90 hover:scale-105 hover:rotate-90">
-                  <Icon size={24} strokeWidth={2.5} />
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-lime-400 text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center transform transition-all duration-300 active:scale-90 hover:scale-110 hover:shadow-primary/50 hover:rotate-90">
+                  <Icon size={22} strokeWidth={2.5} />
                 </div>
               </NavLink>
             )
@@ -46,20 +46,32 @@ export default function Navigation() {
               key={to}
               to={to}
               className={`
-                relative flex items-center justify-center w-12 h-12 rounded-full transition-all duration-300
+                group relative flex flex-col items-center justify-center w-14 h-12 rounded-2xl transition-all duration-300
                 ${isActive
-                  ? 'text-primary bg-primary/10'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  ? 'text-primary'
+                  : 'text-text-muted hover:text-text-primary'
                 }
               `}
             >
-              <Icon
-                size={22}
-                strokeWidth={isActive ? 2.5 : 2}
-                className={`transition-all duration-300 ${isActive ? 'scale-110 drop-shadow-[0_0_8px_rgba(234,88,12,0.5)]' : ''}`}
-              />
+              {/* Background glow for active state */}
               {isActive && (
-                <span className="absolute -bottom-1 w-1 h-1 rounded-full bg-primary animate-pulse-subtle" />
+                <div className="absolute inset-0 bg-primary/10 rounded-2xl" />
+              )}
+
+              <Icon
+                size={20}
+                strokeWidth={isActive ? 2.5 : 2}
+                className={`relative z-10 transition-all duration-300 ${isActive ? 'drop-shadow-[0_0_8px_rgba(185,228,60,0.6)]' : 'group-hover:scale-110'}`}
+              />
+
+              {/* Label */}
+              <span className={`relative z-10 text-[10px] font-medium mt-0.5 transition-all duration-300 ${isActive ? 'text-primary' : ''}`}>
+                {label}
+              </span>
+
+              {/* Active indicator dot */}
+              {isActive && (
+                <span className="absolute -top-1 right-2 w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-lg shadow-primary/50" />
               )}
             </NavLink>
           )

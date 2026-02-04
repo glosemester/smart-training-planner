@@ -132,17 +132,23 @@ export function buildUserContext({ workouts = [], currentPlan = null, plans = []
     }
   }
 
-  // 3.KUN AKTIVE ELLER FREMTIDIGE PLANER
-  // Vi trenger ikke sende historikk på gamle planer, det ligger i workouts
+  // 3. ALLE FREMTIDIGE PLANER (Full visibility til konkurranse)
+  // AI må se hele planen for å kunne gjøre langsiktige justeringer
   if (plans && plans.length > 0) {
     const today = new Date()
     context.upcomingPlans = plans
       .filter(p => new Date(p.weekStart) >= today)
-      .slice(0, 4) // Max 4 uker frem i tid
       .map(p => ({
         weekNumber: p.weekNumber,
+        weekStart: p.weekStart,
+        phase: p.phase,
         focus: p.focus
       }))
+
+    // Legg også til totalt antall uker til konkurranse for kontekst
+    if (context.upcomingPlans.length > 0) {
+      context.weeksToRace = context.upcomingPlans.length
+    }
   }
 
   // 4. STATISTIKK OG MÅL (Viktigst!)

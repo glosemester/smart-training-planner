@@ -1,10 +1,20 @@
 import { useState, useEffect } from 'react'
-import { ChevronRight, ChevronLeft, Check, Link2, AlertCircle, Loader2 } from 'lucide-react'
+import { ChevronRight, ChevronLeft, Check, Link2, AlertCircle, Loader2, Ban } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { checkStravaConnection, getStravaHistoryAnalysis } from '../../services/stravaHistoryService'
 import { connectToStrava } from '../../services/stravaService'
 import StravaHistoryCard from './StravaHistoryCard'
 import SummaryStep from './SummaryStep'
+
+const DAYS = [
+  { value: 'monday', label: 'Man', fullLabel: 'Mandag' },
+  { value: 'tuesday', label: 'Tir', fullLabel: 'Tirsdag' },
+  { value: 'wednesday', label: 'Ons', fullLabel: 'Onsdag' },
+  { value: 'thursday', label: 'Tor', fullLabel: 'Torsdag' },
+  { value: 'friday', label: 'Fre', fullLabel: 'Fredag' },
+  { value: 'saturday', label: 'Lør', fullLabel: 'Lørdag' },
+  { value: 'sunday', label: 'Søn', fullLabel: 'Søndag' }
+]
 
 const wizardSteps = [
   {
@@ -38,12 +48,32 @@ const wizardSteps = [
     type: 'race_details',
     showIf: (answers) => answers.goal === 'race'
   },
+  // ========== NYE STEG ==========
   {
-    id: 'availability',
-    title: 'Tilgjengelighet',
-    question: 'Hvor mange dager kan du trene per uke?',
-    type: 'availability_combined'
+    id: 'trainingType',
+    title: 'Type trening',
+    question: 'Hva slags trening skal planen inneholde?',
+    type: 'training_type'
   },
+  {
+    id: 'sessionsPerWeek',
+    title: 'Antall økter',
+    question: 'Hvor mange økter vil du trene per uke?',
+    type: 'sessions_slider'
+  },
+  {
+    id: 'daySelection',
+    title: 'Velg treningsdager',
+    question: 'Hvilke dager kan du trene?',
+    type: 'day_picker_advanced'
+  },
+  {
+    id: 'startVolume',
+    title: 'Startvolum',
+    question: 'Hvor mye trener du per uke nå?',
+    type: 'volume_input'
+  },
+  // ==============================
   {
     id: 'sessionDuration',
     title: 'Treningsøkter',
@@ -62,9 +92,19 @@ export default function PlanningWizard({ onComplete, onCancel }) {
   const { user } = useAuth()
   const [currentStep, setCurrentStep] = useState(0)
   const [answers, setAnswers] = useState({
+    // Eksisterende
     daysPerWeek: 4,
     availableDays: [],
-    preferredTime: 'flexible'
+    preferredTime: 'flexible',
+    // Nye felter
+    trainingType: null,          // 'running_only' | 'hyrox_hybrid'
+    sessionsPerWeek: 4,          // 2-7
+    blockedDays: [],             // Dager som ALDRI skal ha trening
+    startVolume: {               // Startvolum
+      mode: 'strava',            // 'strava' | 'manual' | 'beginner'
+      kmPerWeek: null,
+      hoursPerWeek: null
+    }
   })
 
   // Strava state
@@ -87,7 +127,6 @@ export default function PlanningWizard({ onComplete, onCancel }) {
         setStravaConnected(status.connected)
 
         if (status.connected) {
-          // Hent historikk automatisk
           const historyResult = await getStravaHistoryAnalysis(user.uid, 4)
           if (historyResult.success) {
             setStravaAnalysis(historyResult.analysis)
@@ -125,7 +164,6 @@ export default function PlanningWizard({ onComplete, onCancel }) {
 
   const handleNext = () => {
     if (isLastStep || step.type === 'summary') {
-      // Ferdig - kall onComplete
       handleGenerate()
     } else {
       let nextStep = currentStep + 1
@@ -157,7 +195,23 @@ export default function PlanningWizard({ onComplete, onCancel }) {
   const handleGenerate = () => {
     setIsGenerating(true)
 
-    // Bygg userData-objektet med Strava-historikk
+    // Beregn startvolum basert på modus
+    let calculatedStartVolume = answers.startVolume
+    if (answers.startVolume.mode === 'strava' && stravaAnalysis) {
+      calculatedStartVolume = {
+        ...calculatedStartVolume,
+        kmPerWeek: stravaAnalysis.weeklyAvgKm,
+        hoursPerWeek: stravaAnalysis.avgWeeklyHours || Math.round(stravaAnalysis.weeklyAvgKm / 10)
+      }
+    } else if (answers.startVolume.mode === 'beginner') {
+      calculatedStartVolume = {
+        ...calculatedStartVolume,
+        kmPerWeek: 15,
+        hoursPerWeek: 3
+      }
+    }
+
+    // Bygg userData-objektet med alle nye felter
     const userData = {
       ...answers,
       goal: answers.raceDetails ? {
@@ -166,6 +220,11 @@ export default function PlanningWizard({ onComplete, onCancel }) {
       } : {
         type: answers.goal
       },
+      // Eksplisitt inkluder nye felter for backend
+      trainingType: answers.trainingType,
+      sessionsPerWeek: answers.sessionsPerWeek,
+      blockedDays: answers.blockedDays,
+      startVolume: calculatedStartVolume,
       stravaHistory: stravaAnalysis
     }
 
@@ -173,24 +232,43 @@ export default function PlanningWizard({ onComplete, onCancel }) {
   }
 
   const canProceed = () => {
-    // Strava gate - må være tilkoblet
+    // Strava gate
     if (step.type === 'strava_gate') {
       return stravaConnected && !stravaLoading
     }
 
-    // Strava historikk - alltid OK (bare visning)
+    // Strava historikk
     if (step.type === 'strava_history') {
       return true
     }
 
-    // Summary - alltid OK
+    // Summary
     if (step.type === 'summary') {
       return true
     }
 
-    // Availability combined
-    if (step.type === 'availability_combined') {
-      return answers.daysPerWeek > 0 && answers.availableDays?.length > 0
+    // Training type - må velge en
+    if (step.type === 'training_type') {
+      return !!answers.trainingType
+    }
+
+    // Sessions slider - alltid OK (har default)
+    if (step.type === 'sessions_slider') {
+      return answers.sessionsPerWeek >= 2 && answers.sessionsPerWeek <= 7
+    }
+
+    // Day picker advanced - må ha nok tilgjengelige dager
+    if (step.type === 'day_picker_advanced') {
+      const effectiveDays = answers.availableDays?.filter(d => !answers.blockedDays?.includes(d)) || []
+      return effectiveDays.length >= answers.sessionsPerWeek
+    }
+
+    // Volume input - alltid OK (har default modus)
+    if (step.type === 'volume_input') {
+      if (answers.startVolume.mode === 'manual') {
+        return answers.startVolume.kmPerWeek > 0 || answers.startVolume.hoursPerWeek > 0
+      }
+      return true
     }
 
     // Session details
@@ -217,6 +295,9 @@ export default function PlanningWizard({ onComplete, onCancel }) {
 
   const visibleSteps = getVisibleSteps()
   const currentVisibleIndex = getCurrentVisibleIndex()
+
+  // Beregn effektive treningsdager (tilgjengelige minus blokkerte)
+  const effectiveTrainingDays = answers.availableDays?.filter(d => !answers.blockedDays?.includes(d)) || []
 
   return (
     <div className="max-w-2xl mx-auto space-y-8" role="dialog" aria-labelledby="wizard-title">
@@ -315,7 +396,6 @@ export default function PlanningWizard({ onComplete, onCancel }) {
         {step.type === 'strava_history' && (
           <div className="space-y-4">
             <StravaHistoryCard analysis={stravaAnalysis} loading={stravaLoading} />
-
             <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
               Vi bruker denne dataen til å lage en realistisk plan tilpasset ditt nivå.
             </p>
@@ -423,59 +503,124 @@ export default function PlanningWizard({ onComplete, onCancel }) {
           </div>
         )}
 
-        {/* AVAILABILITY COMBINED */}
-        {step.type === 'availability_combined' && (
-          <div className="space-y-6">
-            {/* Dager per uke slider */}
-            <div className="card py-6 space-y-4">
-              <label className="input-label">Antall treningsdager per uke</label>
-              <div className="text-center">
-                <span className="text-5xl font-bold text-primary">
-                  {answers.daysPerWeek || 4}
-                </span>
-                <span className="text-xl text-gray-500 ml-2">dager</span>
+        {/* ========== NYE STEG ========== */}
+
+        {/* TRAINING TYPE */}
+        {step.type === 'training_type' && (
+          <div className="grid grid-cols-1 gap-4">
+            <button
+              onClick={() => updateAnswer('trainingType', 'running_only')}
+              className={`p-6 rounded-2xl border text-left transition-all duration-300 ${answers.trainingType === 'running_only'
+                ? 'border-primary bg-primary/10 shadow-lg shadow-primary/10'
+                : 'border-white/10 hover:border-white/20 hover:bg-white/5'
+                }`}
+            >
+              <div className="flex items-start gap-4">
+                <span className="text-4xl">🏃</span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className={`font-bold text-xl ${answers.trainingType === 'running_only' ? 'text-primary' : 'text-white'}`}>
+                      Kun løping
+                    </h3>
+                    {answers.trainingType === 'running_only' && <Check size={20} className="text-primary" />}
+                  </div>
+                  <p className="text-text-muted text-sm mt-1">
+                    Bare løpeøkter - ingen styrke eller Hyrox
+                  </p>
+                </div>
               </div>
+            </button>
+
+            <button
+              onClick={() => updateAnswer('trainingType', 'hyrox_hybrid')}
+              className={`p-6 rounded-2xl border text-left transition-all duration-300 ${answers.trainingType === 'hyrox_hybrid'
+                ? 'border-primary bg-primary/10 shadow-lg shadow-primary/10'
+                : 'border-white/10 hover:border-white/20 hover:bg-white/5'
+                }`}
+            >
+              <div className="flex items-start gap-4">
+                <span className="text-4xl">💪</span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className={`font-bold text-xl ${answers.trainingType === 'hyrox_hybrid' ? 'text-primary' : 'text-white'}`}>
+                      Hyrox / Hybrid
+                    </h3>
+                    {answers.trainingType === 'hyrox_hybrid' && <Check size={20} className="text-primary" />}
+                  </div>
+                  <p className="text-text-muted text-sm mt-1">
+                    Løping + styrkeøkter + Hyrox-spesifikk trening
+                  </p>
+                </div>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* SESSIONS SLIDER */}
+        {step.type === 'sessions_slider' && (
+          <div className="space-y-6">
+            <div className="card py-8 space-y-6">
+              <div className="text-center">
+                <span className="text-6xl font-bold text-primary">
+                  {answers.sessionsPerWeek}
+                </span>
+                <span className="text-2xl text-gray-500 ml-2">økter/uke</span>
+              </div>
+
               <input
                 type="range"
                 min={2}
                 max={7}
-                value={answers.daysPerWeek || 4}
-                onChange={(e) => updateAnswer('daysPerWeek', parseInt(e.target.value))}
-                className="w-full h-3 bg-gray-100 dark:bg-white/10 rounded-full appearance-none cursor-pointer accent-primary"
+                value={answers.sessionsPerWeek}
+                onChange={(e) => updateAnswer('sessionsPerWeek', parseInt(e.target.value))}
+                className="w-full h-3 bg-white/10 rounded-full appearance-none cursor-pointer accent-primary"
               />
+
               <div className="flex justify-between text-sm text-gray-500 px-1">
-                <span>2 dager</span>
-                <span>7 dager</span>
+                <span>2 økter</span>
+                <span>7 økter</span>
               </div>
             </div>
 
-            {/* Foretrukne dager */}
+            {stravaAnalysis && (
+              <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
+                <p className="text-sm text-primary">
+                  💡 Basert på Strava-historikken din anbefaler vi <strong>{Math.round(stravaAnalysis.weeklyAvgKm / 8)}-{Math.round(stravaAnalysis.weeklyAvgKm / 6)} økter</strong> per uke.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* DAY PICKER ADVANCED */}
+        {step.type === 'day_picker_advanced' && (
+          <div className="space-y-8">
+            {/* Tilgjengelige dager */}
             <div>
-              <label className="input-label mb-3 block">Hvilke dager passer best?</label>
+              <label className="input-label mb-3 block">
+                Velg treningsdager <span className="text-primary">(minst {answers.sessionsPerWeek})</span>
+              </label>
               <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
-                {[
-                  { value: 'monday', label: 'Man' },
-                  { value: 'tuesday', label: 'Tir' },
-                  { value: 'wednesday', label: 'Ons' },
-                  { value: 'thursday', label: 'Tor' },
-                  { value: 'friday', label: 'Fre' },
-                  { value: 'saturday', label: 'Lør' },
-                  { value: 'sunday', label: 'Søn' }
-                ].map(day => {
+                {DAYS.map(day => {
                   const isSelected = answers.availableDays?.includes(day.value)
+                  const isBlocked = answers.blockedDays?.includes(day.value)
                   return (
                     <button
                       key={day.value}
                       onClick={() => {
+                        if (isBlocked) return // Kan ikke velge blokkert dag
                         const current = answers.availableDays || []
                         const newValue = isSelected
                           ? current.filter(v => v !== day.value)
                           : [...current, day.value]
                         updateAnswer('availableDays', newValue)
                       }}
-                      className={`p-3 rounded-xl border text-center transition-all ${isSelected
-                        ? 'border-primary bg-primary/10 text-primary font-medium'
-                        : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-400 hover:border-gray-300'
+                      disabled={isBlocked}
+                      className={`p-3 rounded-xl border text-center transition-all ${isBlocked
+                        ? 'opacity-30 cursor-not-allowed bg-red-500/10 border-red-500/20'
+                        : isSelected
+                          ? 'border-primary bg-primary/10 text-primary font-bold'
+                          : 'border-white/10 text-gray-400 hover:border-white/20 hover:text-white'
                         }`}
                     >
                       {day.label}
@@ -485,47 +630,176 @@ export default function PlanningWizard({ onComplete, onCancel }) {
               </div>
             </div>
 
-            {/* Tidspunkt på dagen */}
+            {/* Blokkerte dager */}
             <div>
-              <label className="input-label mb-3 block">Når trener du helst?</label>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { value: 'morning', label: 'Morgen', icon: '🌅', desc: 'Før jobb' },
-                  { value: 'lunch', label: 'Lunsj', icon: '☀️', desc: 'Midt på dagen' },
-                  { value: 'evening', label: 'Kveld', icon: '🌙', desc: 'Etter jobb' },
-                  { value: 'flexible', label: 'Fleksibel', icon: '🔄', desc: 'Varierer' }
-                ].map(time => {
-                  const isSelected = answers.preferredTime === time.value
+              <label className="input-label mb-3 block flex items-center gap-2">
+                <Ban size={16} className="text-red-400" />
+                Blokkerte dager <span className="text-text-muted">(aldri trening)</span>
+              </label>
+              <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                {DAYS.map(day => {
+                  const isBlocked = answers.blockedDays?.includes(day.value)
+                  const isAvailable = answers.availableDays?.includes(day.value)
                   return (
                     <button
-                      key={time.value}
-                      onClick={() => updateAnswer('preferredTime', time.value)}
-                      className={`p-4 rounded-xl border text-left transition-all ${isSelected
-                        ? 'border-primary bg-primary/5'
-                        : 'border-gray-200 dark:border-white/10 hover:border-gray-300'
+                      key={day.value}
+                      onClick={() => {
+                        const current = answers.blockedDays || []
+                        const newValue = isBlocked
+                          ? current.filter(v => v !== day.value)
+                          : [...current, day.value]
+                        updateAnswer('blockedDays', newValue)
+                        // Fjern fra availableDays hvis vi blokkerer
+                        if (!isBlocked && isAvailable) {
+                          updateAnswer('availableDays', answers.availableDays.filter(v => v !== day.value))
+                        }
+                      }}
+                      className={`p-3 rounded-xl border text-center transition-all ${isBlocked
+                        ? 'border-red-500 bg-red-500/20 text-red-400 font-bold'
+                        : 'border-white/10 text-gray-400 hover:border-red-500/50 hover:text-red-400'
                         }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">{time.icon}</span>
-                        <div>
-                          <p className={`font-medium ${isSelected ? 'text-primary' : 'text-gray-900 dark:text-white'}`}>
-                            {time.label}
-                          </p>
-                          <p className="text-xs text-gray-500">{time.desc}</p>
-                        </div>
-                      </div>
+                      {day.label}
                     </button>
                   )
                 })}
               </div>
             </div>
+
+            {/* Validering */}
+            {effectiveTrainingDays.length < answers.sessionsPerWeek && (
+              <div className="p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/30">
+                <p className="text-sm text-yellow-400 flex items-center gap-2">
+                  <AlertCircle size={16} />
+                  Du trenger minst {answers.sessionsPerWeek} tilgjengelige dager! (har {effectiveTrainingDays.length})
+                </p>
+              </div>
+            )}
+
+            {effectiveTrainingDays.length >= answers.sessionsPerWeek && (
+              <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20">
+                <p className="text-sm text-green-400">
+                  ✅ {answers.sessionsPerWeek} økter vil bli lagt på: <strong>{effectiveTrainingDays.map(d => DAYS.find(day => day.value === d)?.label).join(', ')}</strong>
+                </p>
+              </div>
+            )}
           </div>
         )}
 
-        {/* SESSION DETAILS */}
+        {/* VOLUME INPUT */}
+        {step.type === 'volume_input' && (
+          <div className="space-y-4">
+            {/* Strava-basert (anbefalt) */}
+            {stravaAnalysis && (
+              <button
+                onClick={() => updateAnswer('startVolume', { ...answers.startVolume, mode: 'strava' })}
+                className={`w-full p-6 rounded-2xl border text-left transition-all ${answers.startVolume.mode === 'strava'
+                  ? 'border-primary bg-primary/10'
+                  : 'border-white/10 hover:border-white/20'
+                  }`}
+              >
+                <div className="flex items-start gap-4">
+                  <span className="text-3xl">📊</span>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className={`font-bold ${answers.startVolume.mode === 'strava' ? 'text-primary' : 'text-white'}`}>
+                        Basert på Strava
+                      </h3>
+                      <span className="text-xs px-2 py-0.5 bg-primary/20 text-primary rounded-full">Anbefalt</span>
+                      {answers.startVolume.mode === 'strava' && <Check size={18} className="text-primary" />}
+                    </div>
+                    <p className="text-text-muted text-sm mt-1">
+                      Siste 4 uker: <strong>{stravaAnalysis.weeklyAvgKm} km</strong>/uke, {stravaAnalysis.avgWeeklyHours || Math.round(stravaAnalysis.weeklyAvgKm / 10)}t totalt
+                    </p>
+                  </div>
+                </div>
+              </button>
+            )}
+
+            {/* Manuell input */}
+            <button
+              onClick={() => updateAnswer('startVolume', { ...answers.startVolume, mode: 'manual' })}
+              className={`w-full p-6 rounded-2xl border text-left transition-all ${answers.startVolume.mode === 'manual'
+                ? 'border-primary bg-primary/10'
+                : 'border-white/10 hover:border-white/20'
+                }`}
+            >
+              <div className="flex items-start gap-4">
+                <span className="text-3xl">🔢</span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className={`font-bold ${answers.startVolume.mode === 'manual' ? 'text-primary' : 'text-white'}`}>
+                      Jeg velger selv
+                    </h3>
+                    {answers.startVolume.mode === 'manual' && <Check size={18} className="text-primary" />}
+                  </div>
+                  <p className="text-text-muted text-sm mt-1">
+                    Angi ditt nåværende treningsvolum manuelt
+                  </p>
+                </div>
+              </div>
+            </button>
+
+            {/* Manuell input felter */}
+            {answers.startVolume.mode === 'manual' && (
+              <div className="grid grid-cols-2 gap-4 pl-16 animate-fade-in-up">
+                <div>
+                  <label className="input-label">Løping (km/uke)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="25"
+                    value={answers.startVolume.kmPerWeek || ''}
+                    onChange={(e) => updateAnswer('startVolume', { ...answers.startVolume, kmPerWeek: parseFloat(e.target.value) })}
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label className="input-label">Timer/uke</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    placeholder="4"
+                    value={answers.startVolume.hoursPerWeek || ''}
+                    onChange={(e) => updateAnswer('startVolume', { ...answers.startVolume, hoursPerWeek: parseFloat(e.target.value) })}
+                    className="input"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Beginner */}
+            <button
+              onClick={() => updateAnswer('startVolume', { ...answers.startVolume, mode: 'beginner' })}
+              className={`w-full p-6 rounded-2xl border text-left transition-all ${answers.startVolume.mode === 'beginner'
+                ? 'border-primary bg-primary/10'
+                : 'border-white/10 hover:border-white/20'
+                }`}
+            >
+              <div className="flex items-start gap-4">
+                <span className="text-3xl">🚀</span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className={`font-bold ${answers.startVolume.mode === 'beginner' ? 'text-primary' : 'text-white'}`}>
+                      Bygg fra scratch
+                    </h3>
+                    {answers.startVolume.mode === 'beginner' && <Check size={18} className="text-primary" />}
+                  </div>
+                  <p className="text-text-muted text-sm mt-1">
+                    Start forsiktig med 15 km / 3 timer per uke
+                  </p>
+                </div>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* =============================== */}
+
+        {/* SESSION DETAILS (eksisterende, forenklet) */}
         {step.type === 'session_details' && (
           <div className="space-y-6">
-            {/* Øktlengde */}
             <div>
               <label className="input-label mb-3 block">Hvor lang tid har du per økt?</label>
               <div className="grid grid-cols-2 gap-3">
@@ -542,10 +816,10 @@ export default function PlanningWizard({ onComplete, onCancel }) {
                       onClick={() => updateAnswer('maxSessionDuration', duration.value)}
                       className={`p-4 rounded-xl border text-center transition-all ${isSelected
                         ? 'border-primary bg-primary/5'
-                        : 'border-gray-200 dark:border-white/10 hover:border-gray-300'
+                        : 'border-white/10 hover:border-white/20'
                         }`}
                     >
-                      <p className={`font-bold text-lg ${isSelected ? 'text-primary' : 'text-gray-900 dark:text-white'}`}>
+                      <p className={`font-bold text-lg ${isSelected ? 'text-primary' : 'text-white'}`}>
                         {duration.label}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">{duration.desc}</p>
@@ -555,16 +829,15 @@ export default function PlanningWizard({ onComplete, onCancel }) {
               </div>
             </div>
 
-            {/* Preferanser */}
             <div>
               <label htmlFor="preferences" className="input-label">
-                Andre preferanser eller begrensninger? (valgfritt)
+                Andre preferanser? (valgfritt)
               </label>
               <textarea
                 id="preferences"
                 value={answers.preferences || ''}
                 onChange={(e) => updateAnswer('preferences', e.target.value)}
-                placeholder="F.eks: Foretrekker terrengloping, har kneproblemer, unngå intervaller på mandager..."
+                placeholder="F.eks: Foretrekker terrengloping, har kneproblemer..."
                 rows={3}
                 className="input resize-none"
               />
@@ -580,14 +853,15 @@ export default function PlanningWizard({ onComplete, onCancel }) {
             onEditStep={handleEditStep}
             onGenerate={handleGenerate}
             isGenerating={isGenerating}
+            wizardSteps={wizardSteps}
           />
         )}
       </div>
 
-      {/* Navigation - ikke vis for summary (har egen knapp) */}
+      {/* Navigation */}
       {step.type !== 'summary' && (
         <>
-          <div className="flex gap-4 pt-4 border-t border-gray-100 dark:border-white/5">
+          <div className="flex gap-4 pt-4 border-t border-white/5">
             {currentStep > 0 && (
               <button
                 onClick={handleBack}
@@ -608,7 +882,6 @@ export default function PlanningWizard({ onComplete, onCancel }) {
             </button>
           </div>
 
-          {/* Cancel */}
           <button
             onClick={onCancel}
             className="w-full text-center text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"

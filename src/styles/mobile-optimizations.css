@@ -1,0 +1,156 @@
+/**
+ * Mobile-specific optimizations
+ * Improves UX on touch devices
+ */
+
+/* Touch-friendly minimum sizes */
+@media (max-width: 768px) {
+  /* Ensure all interactive elements are at least 44x44px */
+  button,
+  a,
+  [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Improve tap feedback - prevent double-tap zoom */
+  * {
+    touch-action: manipulation;
+  }
+
+  /* Prevent text selection on interactive elements */
+  button,
+  a {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Better scroll behavior */
+  body {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
+  /* Improve input zoom behavior */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important; /* Prevents zoom on iOS */
+  }
+
+  /* Better spacing for cards on mobile */
+  .glass-card,
+  [class*="GlassCard"] {
+    padding: 1rem; /* Reduce from 1.5rem on mobile */
+  }
+
+  /* Optimize dashboard layout */
+  .dashboard-grid {
+    gap: 1rem; /* Reduce gap on mobile */
+  }
+
+  /* Better header spacing on mobile */
+  header {
+    padding-left: max(env(safe-area-inset-left), 1rem);
+    padding-right: max(env(safe-area-inset-right), 1rem);
+  }
+
+  /* Navigation safe area */
+  nav {
+    padding-bottom: max(env(safe-area-inset-bottom), 1rem);
+  }
+
+  /* Modals/Dropdowns - prevent scrolling issues */
+  .dropdown-menu,
+  .modal {
+    max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 2rem);
+    overflow-y: auto;
+  }
+
+  /* Better floating chat button positioning */
+  .floating-chat-button {
+    bottom: calc(env(safe-area-inset-bottom) + 6rem);
+    right: max(env(safe-area-inset-right), 1rem);
+  }
+}
+
+/* Landscape mobile optimizations */
+@media (max-width: 768px) and (orientation: landscape) {
+  /* Reduce vertical spacing in landscape */
+  .space-y-6 {
+    row-gap: 1rem !important;
+  }
+
+  /* Smaller header in landscape */
+  header {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  /* Hide navigation in landscape for more screen space */
+  nav {
+    transform: translateY(100%);
+    transition: transform 0.3s ease;
+  }
+
+  /* Show nav on scroll up */
+  nav.show {
+    transform: translateY(0);
+  }
+}
+
+/* PWA-specific optimizations */
+@media (display-mode: standalone) {
+  /* Full bleed for PWA */
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Adjust header for notch/dynamic island */
+  header {
+    padding-top: max(env(safe-area-inset-top), 0.75rem);
+  }
+}
+
+/* Tablet optimizations (medium screens) */
+@media (min-width: 768px) and (max-width: 1024px) {
+  /* 2-column layout for cards */
+  .dashboard-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Optimize modal widths */
+  .modal {
+    max-width: 90vw;
+  }
+}
+
+/* Improve touch scrolling momentum */
+@supports (-webkit-overflow-scrolling: touch) {
+  .overflow-auto,
+  .overflow-y-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Better focus indicators for accessibility */
+@media (prefers-reduced-motion: no-preference) {
+  *:focus-visible {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
+    transition: outline-offset 0.2s ease;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  button,
+  a,
+  .glass-card {
+    border-width: 2px;
+  }
+}

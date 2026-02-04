@@ -1,38 +1,17 @@
-import { useMemo } from 'react'
 import { Activity, Flame, Clock, MapPin } from 'lucide-react'
 import GlassCard from '../ui/GlassCard'
+import { useMetrics } from '../../contexts/MetricsContext'
 
-export default function WeeklyProgress({ workouts, weeklyGoal = 5 }) {
-    const stats = useMemo(() => {
-        const now = new Date()
-        // Calculate stats for current week
-        // ... logic to calculate stats ...
-        const thisWeekWorkouts = workouts.filter(w => {
-            const d = new Date(w.date)
-            const diff = now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1)
-            const weekStart = new Date(now.setDate(diff))
-            weekStart.setHours(0, 0, 0, 0)
-            return d >= weekStart
-        })
+export default function WeeklyProgress({ weeklyGoal = 5 }) {
+    const { weeklyLoad } = useMetrics()
 
-        let totalMinutes = 0
-        let totalKm = 0
-        let totalCalories = 0
-
-        thisWeekWorkouts.forEach(w => {
-            totalMinutes += w.duration || 0
-            if (w.running?.distance) totalKm += w.running.distance
-            // Mock calories if not present, or use actual
-            totalCalories += (w.calories || (w.duration * 8)) // Rough estimate
-        })
-
-        return {
-            count: thisWeekWorkouts.length,
-            minutes: totalMinutes,
-            km: Math.round(totalKm * 10) / 10,
-            calories: Math.round(totalCalories)
-        }
-    }, [workouts])
+    // Use data from MetricsContext (single source of truth)
+    const stats = {
+        count: weeklyLoad?.count || 0,
+        hours: weeklyLoad?.hours || 0,
+        km: weeklyLoad?.km || 0,
+        calories: Math.round((weeklyLoad?.hours || 0) * 60 * 8) // Rough estimate: 8 cal/min
+    }
 
     const progressPercentage = Math.min(100, (stats.count / weeklyGoal) * 100)
     const radius = 50
@@ -87,7 +66,7 @@ export default function WeeklyProgress({ workouts, weeklyGoal = 5 }) {
                 <div className="grid grid-cols-2 gap-3">
                     <StatsBox icon={Flame} value={stats.calories} label="kcal" color="text-orange-400" />
                     <StatsBox icon={Activity} value={"142"} label="Avg BPM" color="text-red-400" /> {/* Mock BPM for now */}
-                    <StatsBox icon={Clock} value={Math.round(stats.minutes / 60 * 10) / 10} label="Hours" color="text-blue-400" />
+                    <StatsBox icon={Clock} value={stats.hours} label="Hours" color="text-blue-400" />
                     <StatsBox icon={MapPin} value={stats.km} label="Km" color="text-green-400" />
                 </div>
             </div>

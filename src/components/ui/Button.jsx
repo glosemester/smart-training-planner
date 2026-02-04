@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { buttonPress } from '../../utils/animations';
 
 const Button = ({
     children,
@@ -28,8 +29,7 @@ const Button = ({
 
     return (
         <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.95 }}
+            {...buttonPress}
             className={`
         ${baseStyles}
         ${variants[variant] || variants.primary}

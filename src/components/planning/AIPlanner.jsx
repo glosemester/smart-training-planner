@@ -54,13 +54,18 @@ export default function AIPlanner() {
   })
   const [planContext, setPlanContext] = useState(null)
 
-  // Smart oppdatering: Overvåk currentPlan og fjern midlertidig generatedPlan når sync er ok
+  // Auto-clear generatedPlan when real plan is loaded (with safety check)
+  // Only clear if we're not currently generating and currentPlan actually exists with sessions
   useEffect(() => {
-    if (currentPlan && generatedPlan) {
-      console.log('Sync detected: currentPlan updated, clearing temporary generatedPlan')
-      setGeneratedPlan(null)
+    if (currentPlan && generatedPlan && !generating && currentPlan.sessions?.length > 0) {
+      console.log('Sync detected: currentPlan loaded with data, clearing temporary generatedPlan')
+      // Add a small delay to ensure UI has rendered the currentPlan first
+      const timer = setTimeout(() => {
+        setGeneratedPlan(null)
+      }, 500)
+      return () => clearTimeout(timer)
     }
-  }, [currentPlan, generatedPlan])
+  }, [currentPlan, generatedPlan, generating])
 
   // Drag and drop sensors
   const sensors = useSensors(
@@ -76,22 +81,27 @@ export default function AIPlanner() {
     setError(null)
 
     try {
-      // Forbered data for AI med wizard-svar
+      // ✅ RIKTIG: Bruk faktiske feltnavn fra PlanningWizard
       const userData = {
-        // Wizard-preferanser
-        planType: wizardAnswers.planType || 'full_plan',
+        // NYE KRITISKE FELTER fra wizard
+        trainingType: wizardAnswers.trainingType,           // 'running_only' | 'hyrox_hybrid'
+        sessionsPerWeek: wizardAnswers.sessionsPerWeek,     // 2-7
+        availableDays: wizardAnswers.availableDays || [],   // ['monday', 'wednesday', ...]
+        blockedDays: wizardAnswers.blockedDays || [],       // ['tuesday', ...]
+        startVolume: wizardAnswers.startVolume,             // { mode, kmPerWeek, hoursPerWeek }
+        stravaHistory: wizardAnswers.stravaHistory,         // Fra wizard
+
+        // Mål
         goal: wizardAnswers.goal === 'race' ? {
           type: 'race',
           ...wizardAnswers.raceDetails
         } : {
           type: wizardAnswers.goal
         },
-        availableDays: wizardAnswers.preferredDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
-        daysPerWeek: wizardAnswers.availability || 4,
-        maxSessionDuration: wizardAnswers.sessionDuration || 60,
+        maxSessionDuration: wizardAnswers.maxSessionDuration,
         preferences: wizardAnswers.preferences || '',
 
-        // Eksisterende data
+        // Kontekst-data for AI
         recentWorkouts: workouts.slice(0, 20).map(w => ({
           date: w.date,
           type: w.type,
@@ -171,8 +181,20 @@ export default function AIPlanner() {
             })
           } catch (err) {
             console.warn(`Chunk generation failed (attempt ${retries + 1}):`, err)
+
+            // Sjekk om det er en valideringsfeil
+            if (err.message?.includes('HARD RULES')) {
+              console.error('AI violated HARD RULES:', err.message)
+              toast.error(`AI brøt reglene - prøver igjen (${retries + 1}/${MAX_RETRIES})`)
+            }
+
             retries++
-            if (retries >= MAX_RETRIES) throw new Error(`Feilet etter ${MAX_RETRIES} forsøk: ${err.message}`)
+            if (retries >= MAX_RETRIES) {
+              throw new Error(
+                `Feilet etter ${MAX_RETRIES} forsøk. AI klarte ikke følge reglene. ` +
+                `Siste feil: ${err.message}`
+              )
+            }
           }
         }
 
@@ -795,14 +817,16 @@ function DraggableSessionCard({ session, onEdit, onDelete, onView, onMarkComplet
     attributes,
     listeners,
     setNodeRef,
-    transform
+    transform,
+    isDragging
   } = useDraggable({
     id: session.id || session.title,
     disabled: !isEditable
   })
 
   const style = transform ? {
-    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0) ${isDragging ? 'scale(1.05) rotate(2deg)' : 'scale(1)'}`,
+    transition: isDragging ? 'none' : 'transform 0.2s ease-out'
   } : undefined
 
   const type = getWorkoutType(session.type)
@@ -812,8 +836,11 @@ function DraggableSessionCard({ session, onEdit, onDelete, onView, onMarkComplet
     <article
       ref={setNodeRef}
       style={style}
-      className={`bg-background-secondary border border-white/10 rounded-xl p-3 ${isCompleted ? 'opacity-60 bg-success/5 border-success/20' : ''
-        } transition-colors`}
+      className={`bg-background-secondary border border-white/10 rounded-xl p-3 ${
+        isCompleted ? 'opacity-60 bg-success/5 border-success/20' : ''
+      } ${
+        isDragging ? 'opacity-80 shadow-glow-primary z-50' : ''
+      } transition-all duration-200`}
       aria-label={`Treningsøkt: ${session.title}`}
     >
       <div className="flex items-start gap-3">

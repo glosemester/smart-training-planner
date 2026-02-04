@@ -13,16 +13,16 @@ const KineticErosion = ({
     useEffect(() => {
         let myP5 = new p5((s) => {
 
-            // Params
+            // Params - colors will be initialized in setup()
             let params = {
                 seed: seed,
                 intensity: intensity,
                 volume: volume,
                 erosion: 15,
                 scale: 0.008,
-                colorHigh: s.color('#d97757'),
-                colorLow: s.color('#6a9bcc'),
-                colorBg: s.color('#f5f3ee')
+                colorHigh: null,
+                colorLow: null,
+                colorBg: null
             };
 
             let particles = [];
@@ -33,6 +33,12 @@ const KineticErosion = ({
             s.setup = () => {
                 s.createCanvas(width, height);
                 s.pixelDensity(1);
+
+                // Initialize colors AFTER canvas is created
+                params.colorHigh = s.color('#d97757');
+                params.colorLow = s.color('#6a9bcc');
+                params.colorBg = s.color('#f5f3ee');
+
                 s.background(params.colorBg);
 
                 s.randomSeed(params.seed);

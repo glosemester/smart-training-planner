@@ -21,6 +21,10 @@ const HealthSync = lazy(() => import('./components/health/HealthSync'))
 const AIChat = lazy(() => import('./components/chat/AIChat'))
 // const NutritionTracker = lazy(() => import('./components/nutrition/NutritionTracker')) // Removing Pro feature
 const StravaCallback = lazy(() => import('./components/auth/StravaCallback'))
+const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'))
+const RunningCalculator = lazy(() => import('./pages/RunningCalculator'))
+const NutritionPlanner = lazy(() => import('./pages/NutritionPlanner'))
+const BadgesPage = lazy(() => import('./pages/BadgesPage'))
 
 // Loading fallback component
 function LoadingFallback() {
@@ -81,6 +85,10 @@ function App() {
               <Route path="stats" element={<PageTransition className="h-full"><Statistics /></PageTransition>} />
               <Route path="health" element={<PageTransition className="h-full"><HealthSync /></PageTransition>} />
               <Route path="chat" element={<PageTransition className="h-full"><AIChat /></PageTransition>} />
+              <Route path="calculator" element={<PageTransition className="h-full"><RunningCalculator /></PageTransition>} />
+              <Route path="nutrition" element={<PageTransition className="h-full"><NutritionPlanner /></PageTransition>} />
+              <Route path="badges" element={<PageTransition className="h-full"><BadgesPage /></PageTransition>} />
+              <Route path="integrations" element={<PageTransition className="h-full"><IntegrationsPage /></PageTransition>} />
             </Route>
 
             {/* Catch all - redirect to dashboard */}

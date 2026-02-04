@@ -2,6 +2,7 @@ const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require('firebase-admin');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const cors = require('cors')({ origin: true });
+const { validatePlan } = require('./training/validation');
 
 admin.initializeApp();
 
@@ -41,11 +42,20 @@ Du er en erfaren treningsplanlegger som spesialiserer seg på utholdenhetstrenin
 
 Viktige prinsipper du følger:
 - 80/20-regelen: 80% lav intensitet, 20% høy intensitet for løping
-- Progressiv overbelastning: Maks 10% økning i ukentlig volum
+- Progressiv overbelastning: Maks 10% økning i ukentlig volum OG langturdistanse
 - Periodisering: Bygg opp mot konkurranser med riktig tapering
 - Recovery: Vurder søvn, stress og tidligere belastning
 - Balanse: Kombiner løping med styrke uten overtrening
 - Individualitet: Tilpass til personens mål, tid og preferanser
+
+**KRITISK: PROGRESSIVE LONG RUNS**
+For ALLE løpsdistanser må langturer bygges progressivt:
+- Start med 50-60% av konkurransedistanse (minimum 8-10 km)
+- Øk med 1-2 km per uke (aldri mer enn 10%)
+- Peak long run: 80-120% av konkurransedistanse (avhengig av distanse)
+- Eksempel 65km race: Uke 1: 10km → Uke 4: 15km → Uke 8: 25km → Uke 12: 40km → Uke 16: 55km
+- Eksempel 21km race: Uke 1: 10km → Uke 4: 14km → Uke 8: 18km → Uke 10: 21km
+- Taper: Reduser langtur med 30-50% de siste 2 ukene
 
 **ULTRAMARATHON-SPESIFIKT (50+ km):**
 For ultramarathon-distanser følger du disse ekstra prinsippene:
@@ -162,18 +172,34 @@ Gi 2-3 konkrete justeringsforslag i JSON-format:
             .replace(/\n/g, "\\n")
             .replace(/\r/g, "\\r");
 
+        let parsedPlan;
         try {
-            return JSON.parse(jsonString);
+            parsedPlan = JSON.parse(jsonString);
         } catch (e) {
             // Siste utvei hvis parsing feiler: Super-rens
             try {
                 const fallbackClean = text.substring(start, end + 1).replace(/\s+/g, " ");
-                return JSON.parse(fallbackClean);
+                parsedPlan = JSON.parse(fallbackClean);
             } catch (e2) {
                 console.error("Kritisk JSON-feil", { raw: text });
                 throw new HttpsError('internal', "AI-formatet var ugyldig. Vennligst prøv igjen.");
             }
         }
+
+        // VALIDERING: Enforce HARD RULES
+        console.log('Validating plan against HARD RULES...');
+        const validation = validatePlan(parsedPlan, userData);
+
+        if (!validation.isValid) {
+            console.error('HARD RULES VIOLATIONS:', validation.violations);
+            throw new HttpsError(
+                'failed-precondition',
+                `AI violated HARD RULES:\n${validation.violations.slice(0, 3).join('\n')}`
+            );
+        }
+
+        console.log('✅ Plan validation passed');
+        return parsedPlan;
 
     } catch (error) {
         if (error.code === 'internal') throw error; // Re-throw HttpsError
@@ -507,20 +533,74 @@ Hvis data mangler eller er tomt, returner:
 // HELPERS
 // ==========================================
 function buildUserPrompt(userData, chunkInfo) {
-    const { goal = {}, planType, stravaHistory } = userData;
+    const {
+        goal = {},
+        trainingType,        // 'running_only' | 'hyrox_hybrid'
+        sessionsPerWeek,     // 2-7
+        availableDays = [],  // ['monday', 'wednesday', ...]
+        blockedDays = [],    // ['tuesday', ...]
+        startVolume,         // { mode, kmPerWeek, hoursPerWeek }
+        stravaHistory
+    } = userData;
+
+    // Beregn tillatte dager (tilgjengelige minus blokkerte)
+    const allowedDays = availableDays.filter(d => !blockedDays.includes(d));
+    const allowedDaysStr = allowedDays.join(', ') || 'alle dager';
+    const blockedDaysStr = blockedDays.length > 0 ? blockedDays.join(', ') : 'ingen';
+
+    // Beregn startvolum
+    let startKm = 20;
+    if (startVolume?.kmPerWeek) {
+        startKm = startVolume.kmPerWeek;
+    } else if (stravaHistory?.weeklyAvgKm) {
+        startKm = stravaHistory.weeklyAvgKm;
+    }
+
+    // ==========================================
+    // HARD RULES - AI MÅ FØLGE DISSE
+    // ==========================================
+    let hardRules = `
+🚨🚨🚨 UFRAVIKELIGE REGLER - BRYT ALDRI DISSE 🚨🚨🚨
+
+1. TRENINGSTYPE: ${trainingType === 'running_only'
+    ? `KUN LØPEØKTER!
+   - ALDRI inkluder styrke, hyrox, crossfit økter
+   - Tillatte typer: easy_run, tempo, interval, long_run, recovery, rest
+   - INGEN andre økttyper er tillatt!`
+    : `Hybrid plan med løping + styrke/Hyrox/CrossFit.
+   - Inkluder både løpeøkter og styrke/Hyrox-økter`}
+
+2. ANTALL ØKTER: Eksakt ${sessionsPerWeek || 4} treningsøkter per uke
+   - Ikke flere, ikke færre
+   - Resten av dagene skal være "rest"
+
+3. TRENINGSDAGER: Økter KUN på disse dagene: ${allowedDaysStr}
+   - ALDRI trening på: ${blockedDaysStr}
+   - Alle andre dager skal ha type: "rest"
+
+4. STARTVOLUM: Første uke starter på ca ${startKm} km løping
+   - Øk med MAKS 10% per uke
+   - Deload-uke hver 4. uke (reduser volum 30-40%)
+
+KRITISK: Generer sessions for ALLE 7 dager i uken!
+- Treningsdager (${allowedDaysStr}): Faktiske økter
+- Andre dager: type: "rest", title: "Hviledag"
+`;
 
     let goalInfo = "";
     if (goal.type === 'race') {
-        goalInfo = `Mål: Race ${goal.distance} dato ${goal.date}`;
+        goalInfo = `Mål: Race ${goal.distance || 'ukjent distanse'} dato ${goal.date || 'ikke satt'}`;
+        if (goal.targetTime) {
+            goalInfo += `, måltid: ${goal.targetTime}`;
+        }
     } else {
-        goalInfo = `Mål: ${goal.type}`;
+        goalInfo = `Mål: ${goal.type || 'generell form'}`;
     }
 
     let chunkPrompt = "";
-    let weekRange = "";
     if (chunkInfo) {
         const endWeek = chunkInfo.startWeek + chunkInfo.weeksPerChunk - 1;
-        weekRange = `uke ${chunkInfo.startWeek}-${endWeek}`;
+        const weekRange = `uke ${chunkInfo.startWeek}-${endWeek}`;
         if (chunkInfo.isFirstChunk) {
             chunkPrompt = `Lag overordnet strategi og detaljer for ${weekRange}.`;
         } else {
@@ -532,32 +612,28 @@ function buildUserPrompt(userData, chunkInfo) {
     let stravaContext = "";
     if (stravaHistory && stravaHistory.hasEnoughData) {
         stravaContext = `
-STRAVA-HISTORIKK (siste 4 uker - BRUK DETTE SOM UTGANGSPUNKT):
+STRAVA-HISTORIKK (referanse):
 - Ukentlig gjennomsnitt: ${stravaHistory.weeklyAvgKm} km
 - Lengste løp: ${stravaHistory.longestRun} km
-- Gjennomsnittspacing: ${stravaHistory.avgPace || 'ukjent'}/km
-- Konsistens: ${stravaHistory.consistency}%
-- Trend: ${stravaHistory.trend}
-
-VIKTIG: Start planen på et nivå som matcher denne historikken!
-- Første uke bør ha omtrent ${stravaHistory.weeklyAvgKm} km totalt
-- Long run bør starte på maks ${Math.round(stravaHistory.longestRun * 1.1)} km
-- Øk volumet gradvis (maks 10% per uke)`;
+- Gjennomsnittspacing: ${stravaHistory.avgPace || 'ukjent'}/km`;
     }
 
-    // Beregn antall uker for JSON-strukturen
     const weeksToGenerate = chunkInfo ? chunkInfo.weeksPerChunk : (userData.planDuration || 4);
 
-    return `VIKTIG: Svar KUN med JSON. Ingen tekst før eller etter JSON-objektet. Start svaret med { og avslutt med }.
+    // Bestem tillatte økttyper basert på treningstype
+    const allowedTypes = trainingType === 'running_only'
+        ? 'easy_run|tempo|interval|long_run|recovery|rest'
+        : 'easy_run|tempo|interval|long_run|hyrox|crossfit|strength|rest|recovery';
+
+    return `VIKTIG: Svar KUN med JSON. Start med { og avslutt med }.
+
+${hardRules}
 
 ${goalInfo}
 ${chunkPrompt}
 ${stravaContext}
 
-BRUKERDATA:
-${JSON.stringify(userData, null, 2)}
-
-SVAR MED DENNE EKSAKTE JSON-STRUKTUREN (${weeksToGenerate} uker):
+SVAR MED DENNE EKSAKTE JSON-STRUKTUREN (${weeksToGenerate} uker, 7 dager per uke):
 {
   "planDuration": ${weeksToGenerate},
   "goalInfo": "kort oppsummering av mål",
@@ -566,18 +642,18 @@ SVAR MED DENNE EKSAKTE JSON-STRUKTUREN (${weeksToGenerate} uker):
   "weeks": [
     {
       "weekNumber": 1,
-      "weekStartDate": "2025-01-27",
+      "weekStartDate": "2025-02-03",
       "phase": "base|build|peak|taper",
       "focus": "ukens fokus",
       "totalLoad": {
-        "running_km": 30,
-        "strength_sessions": 2,
-        "estimated_hours": 6
+        "running_km": ${startKm},
+        "strength_sessions": ${trainingType === 'running_only' ? 0 : 2},
+        "estimated_hours": ${Math.round(startKm / 10 + (trainingType === 'running_only' ? 0 : 2))}
       },
       "sessions": [
         {
-          "day": "monday",
-          "type": "easy_run|tempo|interval|long_run|hyrox|crossfit|strength|rest|recovery",
+          "day": "monday|tuesday|wednesday|thursday|friday|saturday|sunday",
+          "type": "${allowedTypes}",
           "title": "Tittel på økten",
           "description": "Kort beskrivelse",
           "purpose": "Hensikt med økten",
@@ -595,7 +671,10 @@ SVAR MED DENNE EKSAKTE JSON-STRUKTUREN (${weeksToGenerate} uker):
   ]
 }
 
-HUSK: Start svaret med { og avslutt med }. Ingen annen tekst.`;
+HUSK:
+- Start svaret med { og avslutt med }
+- Generer 7 sessions per uke (alle dager)
+- Følg HARD RULES over - ALDRI bryt disse!`;
 }
 
 function buildSummaryPrompt(data) {
@@ -764,3 +843,185 @@ exports.refreshStravaToken = onCall({
         throw new HttpsError('internal', error.message || 'Failed to refresh Strava token');
     }
 });
+
+// ==========================================
+// WHOOP INTEGRATION
+// ==========================================
+const whoopAuth = require('./whoop/auth');
+const whoopProxy = require('./whoop/proxy');
+const whoopSync = require('./whoop/sync');
+
+exports.getWhoopAuthUrl = whoopAuth.getWhoopAuthUrl;
+exports.exchangeWhoopToken = whoopAuth.exchangeWhoopToken;
+exports.fetchWhoopData = whoopProxy.fetchWhoopData;
+exports.syncWhoopMetrics = whoopSync.syncWhoopMetrics;
+exports.getLatestWhoopMetrics = whoopSync.getLatestWhoopMetrics;
+exports.getMetricsHistory = whoopSync.getMetricsHistory;
+
+// ==========================================
+// TRAINING ALGORITHM ENGINE
+// ==========================================
+const trainingLogic = require('./training/trainingLogic');
+const adaptiveEngine = require('./training/adaptiveEngine');
+
+/**
+ * Generate a periodized training plan using the algorithm.
+ * This is an alternative to the AI-based generatePlan.
+ */
+exports.generateAlgorithmicPlan = onCall({
+    timeoutSeconds: 30,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const { goal, preferences } = request.data;
+    const userId = request.auth.uid;
+
+    if (!goal || !goal.total_weeks) {
+        throw new HttpsError('invalid-argument', 'Goal with total_weeks is required.');
+    }
+
+    try {
+        // Generate the full plan using the algorithm
+        const plan = trainingLogic.generateFullPlan(goal, preferences);
+
+        // Store in Firestore
+        const db = admin.firestore();
+        const planRef = db.collection('users').doc(userId).collection('plans').doc(plan.planId);
+
+        await planRef.set({
+            ...plan,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            generatedBy: 'algorithm',
+            isActive: true
+        });
+
+        // Mark as active plan in user profile
+        await db.collection('users').doc(userId).set({
+            activePlanId: plan.planId,
+            activeGoal: {
+                raceName: goal.race_name,
+                raceDate: goal.race_date,
+                raceDistKm: goal.race_dist_km,
+                totalWeeks: goal.total_weeks
+            }
+        }, { merge: true });
+
+        return plan;
+
+    } catch (error) {
+        console.error('Algorithm plan generation error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to generate plan.');
+    }
+});
+
+/**
+ * Adjust today's workout based on Whoop recovery data.
+ */
+exports.adjustTodaysWorkout = onCall({
+    timeoutSeconds: 30,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const userId = request.auth.uid;
+    const db = admin.firestore();
+
+    try {
+        // 1. Get latest Whoop metrics
+        const metricsRef = db.collection('users').doc(userId).collection('metrics');
+        const metricsSnap = await metricsRef.orderBy('date', 'desc').limit(1).get();
+
+        if (metricsSnap.empty) {
+            return { adjusted: false, reason: 'No Whoop data available.' };
+        }
+
+        const latestMetrics = metricsSnap.docs[0].data();
+
+        // 2. Get user's HRV baseline
+        const userDoc = await db.collection('users').doc(userId).get();
+        const userData = userDoc.data();
+        const hrvBaseline = userData?.profile?.hrv_baseline || 50;
+
+        // 3. Get today's planned workout from active plan
+        const activePlanId = userData?.activePlanId;
+        if (!activePlanId) {
+            return { adjusted: false, reason: 'No active plan.' };
+        }
+
+        const planDoc = await db.collection('users').doc(userId)
+            .collection('plans').doc(activePlanId).get();
+
+        if (!planDoc.exists) {
+            return { adjusted: false, reason: 'Active plan not found.' };
+        }
+
+        const plan = planDoc.data();
+
+        // Find today's workout
+        const today = new Date().toISOString().split('T')[0];
+        const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][new Date().getDay()];
+
+        // Find current week
+        let todaysWorkout = null;
+        let currentWeek = null;
+        for (const week of plan.weeks || []) {
+            const weekStart = new Date(week.weekStartDate);
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekEnd.getDate() + 6);
+
+            if (new Date(today) >= weekStart && new Date(today) <= weekEnd) {
+                currentWeek = week;
+                todaysWorkout = week.sessions?.find(s => s.day === dayOfWeek);
+                break;
+            }
+        }
+
+        if (!todaysWorkout) {
+            return { adjusted: false, reason: 'No workout planned for today.' };
+        }
+
+        // 4. Analyze and adjust
+        const whoopData = {
+            recoveryScore: latestMetrics.recovery_score || 50,
+            hrv: latestMetrics.hrv || hrvBaseline,
+            restingHr: latestMetrics.resting_hr || 55,
+            sleepPerformance: latestMetrics.sleep_performance || 75,
+            strain: latestMetrics.strain || 0
+        };
+
+        const recommendation = adaptiveEngine.generateDailyRecommendation({
+            whoopData,
+            hrvBaseline,
+            todaysWorkout,
+            recentWorkouts: [], // Could fetch from workouts collection
+            currentPhase: currentWeek?.phase || 'base'
+        });
+
+        return {
+            adjusted: recommendation.shouldAdjust,
+            originalWorkout: todaysWorkout,
+            adjustedWorkout: recommendation.adjustedWorkout,
+            recovery: recommendation.recovery,
+            recommendation: recommendation.overallRecommendation,
+            phase: currentWeek?.phase
+        };
+
+    } catch (error) {
+        console.error('Adjust workout error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to adjust workout.');
+    }
+});
+
+/**
+ * ==================================================
+ * NUTRITION & LIFESTYLE FEATURES
+ * ==================================================
+ */
+const nutrition = require('./nutrition');
+exports.generateMealPlan = nutrition.generateMealPlan;
+exports.generateRecipeFromIngredients = nutrition.generateRecipeFromIngredients;

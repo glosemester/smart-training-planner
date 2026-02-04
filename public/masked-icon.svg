@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Maskable icon with safe zones (80px padding on all sides) -->
+
+  <!-- Background (full bleed) -->
+  <rect width="512" height="512" fill="#060606"/>
+
+  <!-- Gradient for 3D effect -->
+  <defs>
+    <linearGradient id="maskableGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#B9E43C;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#B9E43C;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#9BCF2C;stop-opacity:1" />
+    </linearGradient>
+
+    <!-- Shadow -->
+    <filter id="maskableShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#B9E43C" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Badge in safe zone (80px padding = content area 352x352) -->
+  <rect x="136" y="136" width="240" height="240" rx="50" fill="url(#maskableGradient)" filter="url(#maskableShadow)"/>
+
+  <!-- RC Text -->
+  <text x="256" y="286" font-family="'Inter', 'Outfit', sans-serif" font-size="120" font-weight="800" fill="#060606" text-anchor="middle">RC</text>
+</svg>

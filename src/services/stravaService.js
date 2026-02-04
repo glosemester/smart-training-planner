@@ -88,8 +88,8 @@ export async function getRecentActivities(userId) {
         accessToken = result.data.access_token;
     }
 
-    // 2. Fetch activities
-    const response = await fetch(`https://www.strava.com/api/v3/athlete/activities?per_page=14`, {
+    // 2. Fetch activities with more data
+    const response = await fetch(`https://www.strava.com/api/v3/athlete/activities?per_page=30`, {
         headers: {
             'Authorization': `Bearer ${accessToken}`
         }
@@ -99,9 +99,9 @@ export async function getRecentActivities(userId) {
 
     const data = await response.json();
 
-    // Map to cleaner format
+    // Map to detailed format with all available Strava data
     return data.map(activity => {
-        const distanceKm = (activity.distance / 1000).toFixed(2);
+        const distanceKm = activity.distance / 1000;
         const durationMin = Math.round(activity.moving_time / 60);
         const paceMinPerKm = activity.moving_time / 60 / (activity.distance / 1000);
 
@@ -114,13 +114,45 @@ export async function getRecentActivities(userId) {
 
         return {
             id: activity.id,
-            type: activity.type, // Run, Ride, etc.
-            distance: Number(distanceKm),
+            name: activity.name,
+            type: activity.type, // Run, Ride, Swim, etc.
+            sport_type: activity.sport_type, // More specific type
+            distance: Number(distanceKm.toFixed(2)),
             duration: durationMin,
+            moving_time: activity.moving_time, // seconds
+            elapsed_time: activity.elapsed_time, // total time including pauses
             pace: paceFormatted, // min/km string
-            average_speed: activity.average_speed, // m/s (needed for AI context)
+            average_speed: activity.average_speed, // m/s
+            max_speed: activity.max_speed, // m/s
             start_date: activity.start_date,
-            kudos: activity.kudos_count
+            start_date_local: activity.start_date_local,
+            timezone: activity.timezone,
+            // Heart rate data
+            average_heartrate: activity.average_heartrate || null,
+            max_heartrate: activity.max_heartrate || null,
+            has_heartrate: activity.has_heartrate || false,
+            // Elevation data
+            total_elevation_gain: activity.total_elevation_gain || 0,
+            elev_high: activity.elev_high || null,
+            elev_low: activity.elev_low || null,
+            // Calories (from power or estimated)
+            calories: activity.calories || null,
+            kilojoules: activity.kilojoules || null,
+            // Cadence (for running)
+            average_cadence: activity.average_cadence ? Math.round(activity.average_cadence * 2) : null, // Strava returns half cadence
+            // Suffer score / relative effort
+            suffer_score: activity.suffer_score || null,
+            // Social
+            kudos: activity.kudos_count || 0,
+            comment_count: activity.comment_count || 0,
+            achievement_count: activity.achievement_count || 0,
+            // PR count
+            pr_count: activity.pr_count || 0,
+            // Map/location
+            start_latlng: activity.start_latlng,
+            end_latlng: activity.end_latlng,
+            // Gear
+            gear_id: activity.gear_id
         };
     });
 }
@@ -182,11 +214,11 @@ export async function getMatchingStravaActivity(userId, sessionDate, sessionType
             console.log('✅ Found matching Strava activity:', matchingActivity.id)
             return {
                 stravaId: matchingActivity.id,
-                distance: matchingActivity.distance, // already in km from getRecentActivities
-                duration: matchingActivity.duration, // already in min from getRecentActivities
+                distance: matchingActivity.distance / 1000, // km
+                duration: Math.round(matchingActivity.moving_time / 60), // min
                 avgHR: matchingActivity.average_heartrate || null,
                 maxHR: matchingActivity.max_heartrate || null,
-                avgPace: matchingActivity.pace, // already formatted in getRecentActivities
+                avgPace: formatPaceFromData(matchingActivity.moving_time, matchingActivity.distance),
                 calories: matchingActivity.kilojoules ? Math.round(matchingActivity.kilojoules * 0.239) : null,
                 elevationGain: matchingActivity.total_elevation_gain || null,
                 avgSpeed: matchingActivity.average_speed ? (matchingActivity.average_speed * 3.6).toFixed(1) : null, // m/s to km/h

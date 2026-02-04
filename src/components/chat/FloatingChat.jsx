@@ -2,8 +2,11 @@ import { useState, useRef, useEffect } from 'react'
 import { useWorkouts } from '../../hooks/useWorkouts'
 import { useTraining } from '../../contexts/TrainingContext' // Correct import
 import { sendChatMessage, buildUserContext, STARTER_PROMPTS } from '../../services/chatService'
-import { MessageCircle, Send, Sparkles, User, Bot, Loader, XCircle, Image as ImageIcon, ChevronDown, Minimize2 } from 'lucide-react'
+import { MessageCircle, Send, Sparkles, User, Bot, Loader, XCircle, Image as ImageIcon, ChevronDown, Minimize2, Trash2 } from 'lucide-react'
 import ActionConfirmation from './ActionConfirmation'
+import { useAuth } from '../../hooks/useAuth'
+import { db } from '../../config/firebase'
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 
 export default function FloatingChat() {
     // Combine hooks: useTraining provides both workouts/plans AND the UI state now
@@ -13,15 +16,41 @@ export default function FloatingChat() {
         isChatOpen, setChatOpen, chatInitialMessage, setChatInitialMessage
     } = useTraining()
 
+    const { user } = useAuth()
+
     // const [isOpen, setIsOpen] = useState(false) // Removed local state
     const [messages, setMessages] = useState([])
     const [input, setInput] = useState('')
     const [loading, setLoading] = useState(false)
+    const [loadingHistory, setLoadingHistory] = useState(false)
     const [error, setError] = useState(null)
     const [pendingActions, setPendingActions] = useState(null)
     const [selectedImage, setSelectedImage] = useState(null)
     const fileInputRef = useRef(null)
     const messagesEndRef = useRef(null)
+
+    // Load chat history from Firestore when chat opens
+    useEffect(() => {
+        const loadChatHistory = async () => {
+            if (!user || !isChatOpen) return
+
+            setLoadingHistory(true)
+            try {
+                const chatRef = doc(db, 'users', user.uid, 'chatSessions', 'current')
+                const chatDoc = await getDoc(chatRef)
+
+                if (chatDoc.exists() && chatDoc.data().messages) {
+                    setMessages(chatDoc.data().messages)
+                }
+            } catch (err) {
+                console.error('Failed to load chat history:', err)
+            } finally {
+                setLoadingHistory(false)
+            }
+        }
+
+        loadChatHistory()
+    }, [user, isChatOpen])
 
     // Handle initial message from Context (e.g., triggered by Widget)
     useEffect(() => {
@@ -51,7 +80,7 @@ export default function FloatingChat() {
     }
 
     const handleSendMessage = async (content = input) => {
-        if ((!content.trim() && !selectedImage) || loading) return
+        if ((!content.trim() && !selectedImage) || loading || !user) return
 
         const userMessage = {
             role: 'user',
@@ -75,7 +104,11 @@ export default function FloatingChat() {
             if (!response || !response.message) throw new Error('Ugyldig svar fra AI.')
 
             const aiMessage = { role: 'assistant', content: response.message }
-            setMessages([...updatedMessages, aiMessage])
+            const finalMessages = [...updatedMessages, aiMessage]
+            setMessages(finalMessages)
+
+            // Persist to Firestore (without images to save space)
+            await saveChatHistory(finalMessages)
 
             if (response.actions?.length > 0) {
                 setPendingActions({ message: response.message, actions: response.actions })
@@ -88,7 +121,87 @@ export default function FloatingChat() {
         }
     }
 
-    // ... (keep handleKeyPress, handleConfirmActions)
+    const saveChatHistory = async (messagesToSave) => {
+        if (!user) return
+
+        try {
+            const chatRef = doc(db, 'users', user.uid, 'chatSessions', 'current')
+            // Strip images from messages to save space (keep last 50 messages)
+            const messagesToStore = messagesToSave.slice(-50).map(msg => ({
+                role: msg.role,
+                content: msg.content
+                // Omit image data
+            }))
+
+            await setDoc(chatRef, {
+                messages: messagesToStore,
+                updatedAt: serverTimestamp()
+            })
+        } catch (err) {
+            console.error('Failed to save chat history:', err)
+        }
+    }
+
+    const clearChatHistory = async () => {
+        if (!user) return
+
+        try {
+            setMessages([])
+            const chatRef = doc(db, 'users', user.uid, 'chatSessions', 'current')
+            await setDoc(chatRef, {
+                messages: [],
+                updatedAt: serverTimestamp()
+            })
+        } catch (err) {
+            console.error('Failed to clear chat history:', err)
+        }
+    }
+
+    const handleKeyPress = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            handleSendMessage()
+        }
+    }
+
+    const handleConfirmActions = async (actions) => {
+        try {
+            for (const action of actions) {
+                if (action.type === 'update_session' && action.sessionId) {
+                    await updatePlanSession(currentPlan.id, action.sessionId, action.updates)
+                } else if (action.type === 'add_session' && action.session) {
+                    await addPlanSession(currentPlan.id, action.session)
+                } else if (action.type === 'delete_session' && action.sessionId) {
+                    await deletePlanSession(currentPlan.id, action.sessionId)
+                } else if (action.type === 'move_session' && action.sessionId && action.newDay) {
+                    // Move session to new day
+                    await updatePlanSession(currentPlan.id, action.sessionId, { day: action.newDay })
+                } else if (action.type === 'adjust_plan_load' && action.adjustment && action.percentage) {
+                    // Adjust all sessions in the plan by percentage
+                    const factor = action.adjustment === 'increase' ? (1 + action.percentage / 100) : (1 - action.percentage / 100)
+                    for (const session of currentPlan.sessions) {
+                        if (session.type !== 'rest') {
+                            const updates = {
+                                duration_minutes: Math.round(session.duration_minutes * factor)
+                            }
+                            if (session.details?.distance_km) {
+                                updates.details = {
+                                    ...session.details,
+                                    distance_km: Math.round(session.details.distance_km * factor * 10) / 10
+                                }
+                            }
+                            await updatePlanSession(currentPlan.id, session.id, updates)
+                        }
+                    }
+                }
+            }
+            setPendingActions(null)
+            setMessages(prev => [...prev, { role: 'assistant', content: '✅ Endringene er utført!' }])
+        } catch (err) {
+            console.error('Action error:', err)
+            setError('Kunne ikke utføre endringene.')
+        }
+    }
 
     return (
         <>
@@ -96,13 +209,14 @@ export default function FloatingChat() {
             {!isChatOpen && (
                 <button
                     onClick={() => setChatOpen(true)}
-                    className="fixed bottom-24 right-6 z-[60] w-14 h-14 rounded-full bg-secondary text-white shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all animate-bounce-subtle"
+                    className="fixed bottom-24 right-4 z-[60] w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-lime-400 text-primary-foreground shadow-2xl shadow-primary/30 flex items-center justify-center hover:scale-110 hover:shadow-primary/50 active:scale-95 transition-all duration-300"
+                    style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
                 >
-                    <Bot size={28} />
+                    <Bot size={26} />
                     {messages.length === 0 && (
                         <span className="absolute -top-1 -right-1 flex h-4 w-4">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-4 w-4 bg-primary"></span>
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-4 w-4 bg-white shadow-lg"></span>
                         </span>
                     )}
                 </button>
@@ -110,7 +224,10 @@ export default function FloatingChat() {
 
             {/* Chat Window Overlay */}
             {isChatOpen && (
-                <div className="fixed inset-0 lg:inset-auto lg:bottom-24 lg:right-8 lg:w-[420px] lg:h-[650px] bg-background-elevated/80 backdrop-blur-2xl lg:rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-[70] flex flex-col overflow-hidden border border-white/10 animate-fade-in-up pt-[env(safe-area-inset-top)]">
+                <div
+                    className="fixed inset-0 lg:inset-auto lg:bottom-24 lg:right-8 lg:w-[420px] lg:h-[650px] bg-background/95 backdrop-blur-2xl lg:rounded-[2rem] shadow-[0_25px_60px_rgba(0,0,0,0.6)] z-[70] flex flex-col overflow-hidden border border-white/10 animate-fade-in-up"
+                    style={{ paddingTop: 'env(safe-area-inset-top)' }}
+                >
                     {/* Header */}
                     <div className="px-6 py-5 flex items-center justify-between text-white border-b border-white/5">
                         <div className="flex items-center gap-3">
@@ -125,17 +242,33 @@ export default function FloatingChat() {
                                 </div>
                             </div>
                         </div>
-                        <button
-                            onClick={() => setChatOpen(false)}
-                            className="w-10 h-10 flex items-center justify-center rounded-2xl hover:bg-white/5 transition-colors text-text-secondary hover:text-white"
-                        >
-                            <Minimize2 size={20} />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {messages.length > 0 && (
+                                <button
+                                    onClick={clearChatHistory}
+                                    className="w-10 h-10 flex items-center justify-center rounded-2xl hover:bg-white/5 transition-colors text-text-secondary hover:text-error"
+                                    title="Tøm chat"
+                                >
+                                    <Trash2 size={18} />
+                                </button>
+                            )}
+                            <button
+                                onClick={() => setChatOpen(false)}
+                                className="w-10 h-10 flex items-center justify-center rounded-2xl hover:bg-white/5 transition-colors text-text-secondary hover:text-white"
+                            >
+                                <Minimize2 size={20} />
+                            </button>
+                        </div>
                     </div>
 
                     {/* Messages Area */}
                     <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide">
-                        {messages.length === 0 ? (
+                        {loadingHistory ? (
+                            <div className="flex items-center justify-center py-12">
+                                <Loader size={24} className="animate-spin text-primary" />
+                                <span className="ml-3 text-sm text-text-secondary">Laster samtale...</span>
+                            </div>
+                        ) : messages.length === 0 ? (
                             <div className="space-y-6 py-4">
                                 <div className="bg-white/5 border border-white/5 rounded-3xl p-5 relative overflow-hidden">
                                     <div className="absolute top-0 right-0 p-4 opacity-10">

@@ -1,6 +1,21 @@
 import React from 'react'
-import { Target, Calendar, Clock, FileText, Edit2, Activity, Sparkles } from 'lucide-react'
+import { Target, Calendar, Clock, FileText, Edit2, Activity, Sparkles, Dumbbell, Ban, TrendingUp } from 'lucide-react'
 import StravaHistoryCard from './StravaHistoryCard'
+
+/**
+ * Calculate actual step index accounting for conditional steps
+ * @param {string} stepId - The step ID to find
+ * @param {object} answers - Current wizard answers
+ * @param {array} allSteps - Complete wizardSteps array from PlanningWizard
+ * @returns {number} Actual index in visible steps
+ */
+const getStepIndex = (stepId, answers, allSteps) => {
+  const visibleSteps = allSteps.filter(step => {
+    if (!step.showIf) return true
+    return step.showIf(answers)
+  })
+  return visibleSteps.findIndex(s => s.id === stepId)
+}
 
 /**
  * Detaljert oppsummeringskomponent for wizard
@@ -11,15 +26,16 @@ export default function SummaryStep({
     stravaAnalysis,
     onEditStep,
     onGenerate,
-    isGenerating = false
+    isGenerating = false,
+    wizardSteps  // NY: Receive wizardSteps array
 }) {
     // Hjelpefunksjoner for å formatere verdier
     const formatGoalType = (type) => {
         const types = {
             'general_fitness': 'Generell form',
             'race': 'Konkurranse',
-            'longer_distances': 'Lengre distanser',
-            'faster': 'Bli raskere'
+            'distance': 'Lengre distanser',
+            'speed': 'Bli raskere'
         }
         return types[type] || type
     }
@@ -30,6 +46,10 @@ export default function SummaryStep({
             '10k': '10 km',
             'half_marathon': 'Halvmaraton (21.1 km)',
             'marathon': 'Maraton (42.2 km)',
+            '50k': 'Ultramaraton 50 km',
+            '65k': 'Ultramaraton 65 km',
+            '100k': 'Ultramaraton 100 km',
+            'hyrox': 'Hyrox',
             'ultra': 'Ultramaraton'
         }
         return distances[distance] || distance
@@ -47,16 +67,6 @@ export default function SummaryStep({
         }
         if (!days || days.length === 0) return 'Ikke valgt'
         return days.map(d => dayNames[d] || d).join(', ')
-    }
-
-    const formatTimeOfDay = (time) => {
-        const times = {
-            'morning': 'Morgen',
-            'lunch': 'Lunsj',
-            'evening': 'Kveld',
-            'flexible': 'Fleksibel'
-        }
-        return times[time] || time || 'Ikke valgt'
     }
 
     const formatDuration = (duration) => {
@@ -79,10 +89,24 @@ export default function SummaryStep({
         })
     }
 
+    const formatTrainingType = (type) => {
+        if (type === 'running_only') return '🏃 Kun løping'
+        if (type === 'hyrox_hybrid') return '💪 Hyrox / Hybrid'
+        return 'Ikke valgt'
+    }
+
+    const formatVolumeMode = (startVolume) => {
+        if (!startVolume) return 'Ikke valgt'
+        if (startVolume.mode === 'strava') return '📊 Basert på Strava'
+        if (startVolume.mode === 'manual') return `🔢 ${startVolume.kmPerWeek || 0} km, ${startVolume.hoursPerWeek || 0}t/uke`
+        if (startVolume.mode === 'beginner') return '🚀 Fra scratch (15 km/uke)'
+        return 'Ikke valgt'
+    }
+
     // Beregn antall uker til konkurranse
     const getWeeksToRace = () => {
-        if (!answers.goal?.date) return null
-        const raceDate = new Date(answers.goal.date)
+        if (!answers.raceDetails?.date) return null
+        const raceDate = new Date(answers.raceDetails.date)
         const now = new Date()
         const diffMs = raceDate - now
         const diffWeeks = Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000))
@@ -91,28 +115,31 @@ export default function SummaryStep({
 
     const weeksToRace = getWeeksToRace()
 
+    // Beregn effektive treningsdager
+    const effectiveTrainingDays = answers.availableDays?.filter(d => !answers.blockedDays?.includes(d)) || []
+
     return (
         <div className="space-y-6">
             {/* Header */}
             <div className="text-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                <h2 className="text-2xl font-bold text-white mb-2">
                     Bekreft dine valg
                 </h2>
-                <p className="text-gray-600 dark:text-gray-400">
+                <p className="text-text-muted">
                     Sjekk at alt ser riktig ut før vi genererer din treningsplan
                 </p>
             </div>
 
             {/* Mål-seksjon */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="card">
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                        <Target className="w-5 h-5 text-blue-500" />
-                        <h3 className="font-semibold text-gray-900 dark:text-white">Mål</h3>
+                        <Target className="w-5 h-5 text-blue-400" />
+                        <h3 className="font-semibold text-white">Mål</h3>
                     </div>
                     <button
-                        onClick={() => onEditStep(2)} // Steg for mål
-                        className="flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                        onClick={() => onEditStep(2)}
+                        className="flex items-center gap-1 text-sm text-primary hover:underline"
                     >
                         <Edit2 className="w-4 h-4" />
                         Endre
@@ -121,39 +148,39 @@ export default function SummaryStep({
 
                 <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">Type:</span>
-                        <span className="font-medium text-gray-900 dark:text-white">
-                            {formatGoalType(answers.goal?.type)}
+                        <span className="text-text-muted">Type:</span>
+                        <span className="font-medium text-white">
+                            {formatGoalType(answers.goal)}
                         </span>
                     </div>
 
-                    {answers.goal?.type === 'race' && (
+                    {answers.raceDetails && (
                         <>
                             <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Distanse:</span>
-                                <span className="font-medium text-gray-900 dark:text-white">
-                                    {answers.goal?.distance === 'custom'
-                                        ? `${answers.goal?.customDistance} km`
-                                        : formatDistance(answers.goal?.distance)
+                                <span className="text-text-muted">Distanse:</span>
+                                <span className="font-medium text-white">
+                                    {answers.raceDetails?.distance === 'custom'
+                                        ? `${answers.raceDetails?.customDistance} km`
+                                        : formatDistance(answers.raceDetails?.distance)
                                     }
                                 </span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Dato:</span>
-                                <span className="font-medium text-gray-900 dark:text-white">
-                                    {formatDate(answers.goal?.date)}
+                                <span className="text-text-muted">Dato:</span>
+                                <span className="font-medium text-white">
+                                    {formatDate(answers.raceDetails?.date)}
                                     {weeksToRace && (
-                                        <span className="text-gray-500 ml-1">
+                                        <span className="text-primary ml-1">
                                             ({weeksToRace} uker)
                                         </span>
                                     )}
                                 </span>
                             </div>
-                            {answers.goal?.targetTime && (
+                            {answers.raceDetails?.targetTime && (
                                 <div className="flex justify-between">
-                                    <span className="text-gray-600 dark:text-gray-400">Måltid:</span>
-                                    <span className="font-medium text-gray-900 dark:text-white">
-                                        {answers.goal.targetTime}
+                                    <span className="text-text-muted">Måltid:</span>
+                                    <span className="font-medium text-white">
+                                        {answers.raceDetails.targetTime}
                                     </span>
                                 </div>
                             )}
@@ -162,16 +189,18 @@ export default function SummaryStep({
                 </div>
             </div>
 
-            {/* Tilgjengelighet-seksjon */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm">
+            {/* ========== NYE SEKSJONER ========== */}
+
+            {/* Treningstype-seksjon */}
+            <div className="card">
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                        <Calendar className="w-5 h-5 text-green-500" />
-                        <h3 className="font-semibold text-gray-900 dark:text-white">Tilgjengelighet</h3>
+                        <Dumbbell className="w-5 h-5 text-purple-400" />
+                        <h3 className="font-semibold text-white">Type trening</h3>
                     </div>
                     <button
-                        onClick={() => onEditStep(4)} // Steg for tilgjengelighet
-                        className="flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                        onClick={() => onEditStep(getStepIndex('trainingType', answers, wizardSteps))}
+                        className="flex items-center gap-1 text-sm text-primary hover:underline"
                     >
                         <Edit2 className="w-4 h-4" />
                         Endre
@@ -180,36 +209,75 @@ export default function SummaryStep({
 
                 <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">Dager per uke:</span>
-                        <span className="font-medium text-gray-900 dark:text-white">
-                            {answers.daysPerWeek || 'Ikke valgt'}
+                        <span className="text-text-muted">Treningstype:</span>
+                        <span className="font-medium text-white">
+                            {formatTrainingType(answers.trainingType)}
+                        </span>
+                    </div>
+                </div>
+
+                {answers.trainingType === 'running_only' && (
+                    <div className="mt-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                        <p className="text-xs text-blue-300">
+                            ℹ️ Planen vil kun inneholde løpeøkter
+                        </p>
+                    </div>
+                )}
+            </div>
+
+            {/* Økter & Dager-seksjon */}
+            <div className="card">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                        <Calendar className="w-5 h-5 text-green-400" />
+                        <h3 className="font-semibold text-white">Økter & Dager</h3>
+                    </div>
+                    <button
+                        onClick={() => onEditStep(getStepIndex('sessionsPerWeek', answers, wizardSteps))}
+                        className="flex items-center gap-1 text-sm text-primary hover:underline"
+                    >
+                        <Edit2 className="w-4 h-4" />
+                        Endre
+                    </button>
+                </div>
+
+                <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                        <span className="text-text-muted">Økter per uke:</span>
+                        <span className="font-bold text-primary text-lg">
+                            {answers.sessionsPerWeek}
                         </span>
                     </div>
                     <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">Foretrukne dager:</span>
-                        <span className="font-medium text-gray-900 dark:text-white">
-                            {formatDays(answers.availableDays)}
+                        <span className="text-text-muted">Treningsdager:</span>
+                        <span className="font-medium text-white">
+                            {formatDays(effectiveTrainingDays)}
                         </span>
                     </div>
-                    <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">Tidspunkt:</span>
-                        <span className="font-medium text-gray-900 dark:text-white">
-                            {formatTimeOfDay(answers.preferredTime)}
-                        </span>
-                    </div>
+                    {answers.blockedDays?.length > 0 && (
+                        <div className="flex justify-between">
+                            <span className="text-text-muted flex items-center gap-1">
+                                <Ban size={12} className="text-red-400" />
+                                Blokkerte dager:
+                            </span>
+                            <span className="font-medium text-red-400">
+                                {formatDays(answers.blockedDays)}
+                            </span>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* Øktvarighet-seksjon */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm">
+            {/* Startvolum-seksjon */}
+            <div className="card">
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                        <Clock className="w-5 h-5 text-purple-500" />
-                        <h3 className="font-semibold text-gray-900 dark:text-white">Treningsøkter</h3>
+                        <TrendingUp className="w-5 h-5 text-orange-400" />
+                        <h3 className="font-semibold text-white">Startvolum</h3>
                     </div>
                     <button
-                        onClick={() => onEditStep(5)} // Steg for øktvarighet
-                        className="flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                        onClick={() => onEditStep(getStepIndex('startVolume', answers, wizardSteps))}
+                        className="flex items-center gap-1 text-sm text-primary hover:underline"
                     >
                         <Edit2 className="w-4 h-4" />
                         Endre
@@ -218,8 +286,44 @@ export default function SummaryStep({
 
                 <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">Øktlengde:</span>
-                        <span className="font-medium text-gray-900 dark:text-white">
+                        <span className="text-text-muted">Utgangspunkt:</span>
+                        <span className="font-medium text-white">
+                            {formatVolumeMode(answers.startVolume)}
+                        </span>
+                    </div>
+                    {answers.startVolume?.mode === 'strava' && stravaAnalysis && (
+                        <div className="flex justify-between">
+                            <span className="text-text-muted">Fra Strava:</span>
+                            <span className="font-medium text-primary">
+                                {stravaAnalysis.weeklyAvgKm} km/uke
+                            </span>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* ================================== */}
+
+            {/* Øktvarighet-seksjon */}
+            <div className="card">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                        <Clock className="w-5 h-5 text-cyan-400" />
+                        <h3 className="font-semibold text-white">Øktlengde</h3>
+                    </div>
+                    <button
+                        onClick={() => onEditStep(getStepIndex('sessionDuration', answers, wizardSteps))}
+                        className="flex items-center gap-1 text-sm text-primary hover:underline"
+                    >
+                        <Edit2 className="w-4 h-4" />
+                        Endre
+                    </button>
+                </div>
+
+                <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                        <span className="text-text-muted">Maks øktlengde:</span>
+                        <span className="font-medium text-white">
                             {formatDuration(answers.maxSessionDuration)}
                         </span>
                     </div>
@@ -228,22 +332,22 @@ export default function SummaryStep({
 
             {/* Preferanser-seksjon (hvis utfylt) */}
             {answers.preferences && (
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm">
+                <div className="card">
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
-                            <FileText className="w-5 h-5 text-amber-500" />
-                            <h3 className="font-semibold text-gray-900 dark:text-white">Preferanser</h3>
+                            <FileText className="w-5 h-5 text-amber-400" />
+                            <h3 className="font-semibold text-white">Preferanser</h3>
                         </div>
                         <button
-                            onClick={() => onEditStep(5)} // Samme steg som øktvarighet
-                            className="flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                            onClick={() => onEditStep(getStepIndex('sessionDuration', answers, wizardSteps))}
+                            className="flex items-center gap-1 text-sm text-primary hover:underline"
                         >
                             <Edit2 className="w-4 h-4" />
                             Endre
                         </button>
                     </div>
 
-                    <p className="text-sm text-gray-700 dark:text-gray-300 italic">
+                    <p className="text-sm text-text-muted italic">
                         "{answers.preferences}"
                     </p>
                 </div>
@@ -254,14 +358,11 @@ export default function SummaryStep({
                 <div>
                     <div className="flex items-center gap-2 mb-3">
                         <Activity className="w-5 h-5 text-orange-500" />
-                        <h3 className="font-semibold text-gray-900 dark:text-white">
+                        <h3 className="font-semibold text-white">
                             Din treningshistorikk
                         </h3>
                     </div>
                     <StravaHistoryCard analysis={stravaAnalysis} />
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
-                        Denne dataen brukes til å lage en realistisk plan tilpasset ditt nivå
-                    </p>
                 </div>
             )}
 
@@ -272,8 +373,8 @@ export default function SummaryStep({
                     disabled={isGenerating}
                     className={`w-full flex items-center justify-center gap-2 py-4 px-6 rounded-xl font-semibold text-lg transition-all
                         ${isGenerating
-                            ? 'bg-gray-400 cursor-not-allowed'
-                            : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl'
+                            ? 'bg-gray-600 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-primary to-lime-400 hover:shadow-lg hover:shadow-primary/30 text-primary-foreground'
                         }`}
                 >
                     {isGenerating ? (
@@ -290,8 +391,8 @@ export default function SummaryStep({
                 </button>
 
                 {weeksToRace && (
-                    <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-3">
-                        Din plan vil dekke {weeksToRace} uker frem til konkurransen
+                    <p className="text-center text-sm text-text-muted mt-3">
+                        Din plan vil dekke <span className="text-primary font-bold">{weeksToRace} uker</span> frem til konkurransen
                     </p>
                 )}
             </div>

@@ -6,7 +6,8 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import App from './App'
 import { AuthProvider } from './contexts/AuthContext'
 import { TrainingProvider } from './contexts/TrainingContext'
-
+import { MetricsProvider } from './contexts/MetricsContext'
+import { GamificationProvider } from './contexts/GamificationContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import ErrorBoundary from './components/common/ErrorBoundary'
 import './index.css'
@@ -28,7 +29,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <ThemeProvider>
             <AuthProvider>
               <TrainingProvider>
-                <App />
+                <MetricsProvider>
+                  <GamificationProvider>
+                    <App />
+                  </GamificationProvider>
+                </MetricsProvider>
               </TrainingProvider>
             </AuthProvider>
           </ThemeProvider>

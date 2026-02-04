@@ -14,10 +14,14 @@ const AICoachWidget = () => {
     // Map intentions to colors/icons
     const getStatusConfig = (type) => {
         switch (type) {
+            case 'REST_URGENT':
+                return { color: 'text-red-500', icon: Battery, borderColor: 'border-red-600/50' };
             case 'REST':
                 return { color: 'text-blue-400', icon: Battery, borderColor: 'border-blue-500/30' };
+            case 'PUSH_HARD':
+                return { color: 'text-green-400', icon: Zap, borderColor: 'border-green-500/50' };
             case 'PUSH':
-                return { color: 'text-red-400', icon: Zap, borderColor: 'border-red-500/30' };
+                return { color: 'text-orange-400', icon: Zap, borderColor: 'border-orange-500/30' };
             case 'MOTIVATE':
                 return { color: 'text-yellow-400', icon: Activity, borderColor: 'border-yellow-500/30' };
             default:
@@ -60,6 +64,11 @@ const AICoachWidget = () => {
 
                 {/* Micro-visualization of 'Beliefs' */}
                 <div className="hidden sm:flex flex-col gap-1 text-xs text-right text-gray-500">
+                    {(beliefs.hasPoorRecovery || beliefs.hasGoodRecovery) && (
+                        <span className={beliefs.hasPoorRecovery ? "text-red-400" : "text-green-400"}>
+                            Whoop: {beliefs.hasPoorRecovery ? 'Low Recovery' : 'Prime'}
+                        </span>
+                    )}
                     <span className={beliefs.hasHighFatigue ? "text-red-400" : "text-gray-600"}>
                         Fatigue: {beliefs.hasHighFatigue ? 'High' : 'Normal'}
                     </span>

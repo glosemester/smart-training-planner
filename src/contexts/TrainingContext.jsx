@@ -14,6 +14,9 @@ import { useWorkouts } from '../hooks/queries/useWorkouts'
 import { useTrainingPlans } from '../hooks/queries/useTrainingPlan'
 import { useGoals } from '../hooks/queries/useGoals'
 import { aiMentalModel } from '../services/ai/MentalStateService'
+import { WhoopService } from '../services/WhoopService'
+import { awardWorkoutXP, BADGES } from '../services/gamificationService'
+import toast from 'react-hot-toast'
 
 export const TrainingContext = createContext(null)
 
@@ -26,7 +29,7 @@ export const useTraining = () => {
 }
 
 export function TrainingProvider({ children }) {
-  const { user } = useAuth()
+  const { user, userProfile } = useAuth()
   const queryClient = useQueryClient()
 
   // Queries
@@ -43,6 +46,39 @@ export function TrainingProvider({ children }) {
   // UI State for Global Chat
   const [isChatOpen, setChatOpen] = useState(false)
   const [chatInitialMessage, setChatInitialMessage] = useState(null)
+
+  // Whoop Data State
+  const [whoopData, setWhoopData] = useState(null)
+
+  // Fetch Whoop Data if connected
+  useEffect(() => {
+    const fetchWhoop = async () => {
+      if (userProfile?.integrations?.whoop?.isConnected) {
+        try {
+          const data = await WhoopService.getWeeklySummary();
+          // Transform/Simplify if needed, or pass raw
+          // We mainly need the latest recovery/sleep
+          const latestRecovery = data.recovery?.[0];
+          const latestSleep = data.sleep?.[0]; // Assuming sorted
+
+          setWhoopData({
+            recoveryScore: latestRecovery?.score?.recovery_score,
+            sleepPerformance: latestSleep?.score?.sleep_performance_percentage,
+            raw: data
+          });
+        } catch (err) {
+          console.error("Failed to fetch Whoop for Context:", err);
+          // Set null to indicate Whoop is not available
+          setWhoopData(null);
+        }
+      }
+    };
+
+    if (userProfile) {
+      fetchWhoop();
+    }
+  }, [userProfile]);
+
 
   const openChat = (message = null) => {
     setChatOpen(true)
@@ -116,8 +152,54 @@ export function TrainingProvider({ children }) {
           updatedAt: Timestamp.now()
         }
       )
-      // Invalidate to refetch
-      queryClient.invalidateQueries(['workouts', user.uid])
+
+      // Award XP for completing workout
+      try {
+        // Try to get readiness score from Whoop
+        let readiness = null
+        try {
+          const whoopData = await WhoopService.getRecovery()
+          if (whoopData?.records?.[0]) {
+            readiness = whoopData.records[0].score?.recovery_score
+          }
+        } catch (whoopErr) {
+          // Whoop not connected or failed, continue without readiness
+          console.log('Could not fetch readiness score:', whoopErr)
+        }
+
+        const xpResult = await awardWorkoutXP(user.uid, workoutData, readiness)
+
+        // Show XP notification
+        let message = `+${xpResult.xpGained} XP`
+        if (xpResult.leveledUp) {
+          message = `🎉 Nivå ${xpResult.newLevel}! +${xpResult.xpGained} XP`
+          toast.success(message, { duration: 5000 })
+        } else {
+          toast.success(message, { duration: 3000 })
+        }
+
+        // Show badge notifications
+        if (xpResult.newBadges.length > 0) {
+          xpResult.newBadges.forEach(badgeId => {
+            const badge = BADGES[badgeId]
+            if (badge) {
+              toast.success(`${badge.icon} Badge låst opp: ${badge.name}`, { duration: 5000 })
+            }
+          })
+        }
+
+        // Show streak notification
+        if (xpResult.streakUpdate) {
+          const emoji = xpResult.currentStreak >= 7 ? '🔥🔥' : '🔥'
+          toast.success(`${emoji} ${xpResult.currentStreak} dagers streak!`, { duration: 4000 })
+        }
+      } catch (xpErr) {
+        console.error('Failed to award XP:', xpErr)
+        // Don't fail the workout save if XP awarding fails
+      }
+
+      // Refetch to ensure data is loaded
+      await queryClient.refetchQueries(['workouts', user.uid])
       return docRef.id
     } catch (err) {
       console.error(err)
@@ -135,7 +217,7 @@ export function TrainingProvider({ children }) {
         ...updates,
         updatedAt: Timestamp.now()
       })
-      queryClient.invalidateQueries(['workouts', user.uid])
+      await queryClient.refetchQueries(['workouts', user.uid])
     } catch (err) {
       console.error(err)
       throw err
@@ -148,7 +230,7 @@ export function TrainingProvider({ children }) {
 
     try {
       await deleteDoc(doc(db, 'users', user.uid, 'workouts', workoutId))
-      queryClient.invalidateQueries(['workouts', user.uid])
+      await queryClient.refetchQueries(['workouts', user.uid])
     } catch (err) {
       console.error(err)
       throw err
@@ -171,8 +253,16 @@ export function TrainingProvider({ children }) {
       })
 
       let savedId;
+
+      // CRITICAL FIX: Add unique IDs to sessions if they don't have them
+      const sessionsWithIds = planData.sessions?.map(session => ({
+        ...session,
+        id: session.id || crypto.randomUUID()
+      })) || []
+
       const planToSave = {
         ...planData,
+        sessions: sessionsWithIds,
         weekStart: Timestamp.fromDate(weekStartDate),
         lastModified: Timestamp.now()
       }
@@ -192,11 +282,8 @@ export function TrainingProvider({ children }) {
         savedId = docRef.id
       }
 
-      queryClient.invalidateQueries(['plans', user.uid])
-
-      // Auto-select the updated plan if needed, but invalidation should handle data update
-      // If we want immediate UI feedback of selection:
-      setSelectedPlanId(savedId)
+      // Refetch immediately to ensure data is loaded before returning
+      await queryClient.refetchQueries(['plans', user.uid])
 
       return savedId
 
@@ -228,8 +315,16 @@ export function TrainingProvider({ children }) {
         const weekStartDate = new Date(week.weekStart)
         weekStartDate.setHours(0, 0, 0, 0)
 
+        // CRITICAL FIX: Add unique IDs to sessions if they don't have them
+        // This enables drag-and-drop, editing, and deletion functionality
+        const sessionsWithIds = week.sessions?.map(session => ({
+          ...session,
+          id: session.id || crypto.randomUUID()
+        })) || []
+
         return addDoc(collection(db, 'users', user.uid, 'plans'), {
           ...week,
+          sessions: sessionsWithIds,
           weekStart: Timestamp.fromDate(weekStartDate),
           generatedAt: Timestamp.now(),
           lastModified: Timestamp.now()
@@ -237,7 +332,9 @@ export function TrainingProvider({ children }) {
       })
 
       await Promise.all(promises)
-      queryClient.invalidateQueries(['plans', user.uid])
+
+      // Refetch immediately to ensure data is loaded before returning
+      await queryClient.refetchQueries(['plans', user.uid])
 
     } catch (err) {
       console.error('saveMultipleWeeks failed:', err)
@@ -255,7 +352,7 @@ export function TrainingProvider({ children }) {
         ...updates,
         lastModified: Timestamp.now()
       })
-      queryClient.invalidateQueries(['plans', user.uid])
+      await queryClient.refetchQueries(['plans', user.uid])
     } catch (err) {
       console.error(err)
       throw err
@@ -284,8 +381,8 @@ export function TrainingProvider({ children }) {
     if (!plan) throw new Error('Plan ikke funnet')
 
     const newSession = {
-      id: `custom-${Date.now()}`,
       ...session,
+      id: session.id || crypto.randomUUID(), // Use crypto.randomUUID for consistency
       status: 'planned',
       movedBy: 'user',
       movedAt: new Date()
@@ -314,7 +411,7 @@ export function TrainingProvider({ children }) {
         deleteDoc(doc(db, 'users', user.uid, 'plans', plan.id))
       )
       await Promise.all(deletePromises)
-      queryClient.invalidateQueries(['plans', user.uid])
+      await queryClient.refetchQueries(['plans', user.uid])
     } catch (err) {
       console.error(err)
       throw err
@@ -357,7 +454,7 @@ export function TrainingProvider({ children }) {
     return stats
   }, [workouts])
 
-  // AI Mental Model (Preserve existing logic roughly?)
+  // AI Mental Model
   const [mentalState, setMentalState] = useState(null)
   useEffect(() => {
     if (!loading && workouts.length > 0) {
@@ -372,7 +469,8 @@ export function TrainingProvider({ children }) {
         recentWorkouts: workouts.slice(0, 10),
         stats: { ...stats, acuteLoad: weeklyLoad, chronicLoad },
         currentPlan,
-        goals: goals // Real goals from Firestore
+        goals: goals || [],
+        whoop: whoopData // Feed Whoop data!
       }
 
       // Use the static service instance
@@ -381,7 +479,7 @@ export function TrainingProvider({ children }) {
         setMentalState(newState)
       }
     }
-  }, [workouts, currentPlan, loading, getStats])
+  }, [workouts, currentPlan, loading, getStats, whoopData, goals])
 
   const value = {
     workouts,
