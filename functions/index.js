@@ -871,6 +871,12 @@ const { PerformanceAnalytics } = require('./analytics/performanceAnalytics');
 const { RecoveryPatternLearning } = require('./analytics/recoveryPatterns');
 const { WorkoutResponseTracker } = require('./analytics/workoutResponse');
 
+// ==========================================
+// ADAPTIVE PERIODIZATION & LOAD MANAGEMENT (FASE 2)
+// ==========================================
+const { AdaptivePeriodization } = require('./training/adaptivePeriodization');
+const { LoadManagement } = require('./training/loadManagement');
+
 /**
  * Generate a periodized training plan using the algorithm.
  * This is an alternative to the AI-based generatePlan.
@@ -1169,6 +1175,224 @@ exports.calculateVDOT = onCall({
     } catch (error) {
         console.error('VDOT calculation error:', error);
         throw new HttpsError('internal', error.message || 'Failed to calculate VDOT.');
+    }
+});
+
+/**
+ * ==================================================
+ * ADAPTIVE PERIODIZATION & LOAD MANAGEMENT (FASE 2)
+ * ==================================================
+ */
+
+/**
+ * Generate optimal phase distribution for training plan
+ */
+exports.calculateOptimalPhases = onCall({
+    timeoutSeconds: 30,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const { totalWeeks, raceDistance, userData } = request.data;
+
+    if (!totalWeeks || !raceDistance) {
+        throw new HttpsError('invalid-argument', 'Total weeks and race distance are required.');
+    }
+
+    try {
+        const userId = request.auth.uid;
+        const analytics = new PerformanceAnalytics(userId);
+        const periodization = new AdaptivePeriodization(
+            { ...userData, uid: userId },
+            analytics
+        );
+
+        const phases = await periodization.calculateOptimalPhases(totalWeeks, raceDistance);
+
+        return phases;
+    } catch (error) {
+        console.error('Calculate optimal phases error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to calculate phases.');
+    }
+});
+
+/**
+ * Generate complete periodization schedule
+ */
+exports.generatePeriodizationSchedule = onCall({
+    timeoutSeconds: 30,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const { totalWeeks, raceDistance, baseVolume, userData } = request.data;
+
+    if (!totalWeeks || !raceDistance || !baseVolume) {
+        throw new HttpsError('invalid-argument', 'Total weeks, race distance, and base volume are required.');
+    }
+
+    try {
+        const userId = request.auth.uid;
+        const analytics = new PerformanceAnalytics(userId);
+        const recovery = new RecoveryPatternLearning(userId);
+
+        // Get recovery speed for micro-cycle generation
+        const recoveryPattern = await recovery.learnRecoveryPattern();
+        const recoverySpeed = recoveryPattern.recoverySpeed || 'average';
+
+        const periodization = new AdaptivePeriodization(
+            { ...userData, uid: userId },
+            analytics
+        );
+
+        const schedule = await periodization.generatePeriodizationSchedule(
+            totalWeeks,
+            raceDistance,
+            baseVolume,
+            recoverySpeed
+        );
+
+        return schedule;
+    } catch (error) {
+        console.error('Generate periodization schedule error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to generate schedule.');
+    }
+});
+
+/**
+ * Assess injury risk based on training load and recovery
+ */
+exports.assessInjuryRisk = onCall({
+    timeoutSeconds: 30,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const userId = request.auth.uid;
+
+    try {
+        const analytics = new PerformanceAnalytics(userId);
+        const recovery = new RecoveryPatternLearning(userId);
+        const loadManager = new LoadManagement(analytics, recovery);
+
+        const injuryRisk = await loadManager.assessInjuryRisk();
+
+        return injuryRisk;
+    } catch (error) {
+        console.error('Assess injury risk error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to assess injury risk.');
+    }
+});
+
+/**
+ * Calculate next week's recommended load
+ */
+exports.calculateNextWeekLoad = onCall({
+    timeoutSeconds: 30,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const { currentLoad, phase } = request.data;
+
+    if (!currentLoad || !phase) {
+        throw new HttpsError('invalid-argument', 'Current load and phase are required.');
+    }
+
+    try {
+        const userId = request.auth.uid;
+        const analytics = new PerformanceAnalytics(userId);
+        const recovery = new RecoveryPatternLearning(userId);
+
+        // Get recovery trend
+        const recoveryTrend = await recovery.analyzeRecoveryTrend(7);
+
+        const loadManager = new LoadManagement(analytics, recovery);
+        const nextLoad = loadManager.calculateNextWeekLoad(
+            currentLoad,
+            phase,
+            recoveryTrend.trend.toLowerCase()
+        );
+
+        return nextLoad;
+    } catch (error) {
+        console.error('Calculate next week load error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to calculate next week load.');
+    }
+});
+
+/**
+ * Schedule optimal recovery weeks
+ */
+exports.scheduleRecoveryWeeks = onCall({
+    timeoutSeconds: 30,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const { upcomingWeeks } = request.data;
+
+    if (!upcomingWeeks) {
+        throw new HttpsError('invalid-argument', 'Upcoming weeks parameter is required.');
+    }
+
+    try {
+        const userId = request.auth.uid;
+        const analytics = new PerformanceAnalytics(userId);
+        const recovery = new RecoveryPatternLearning(userId);
+        const loadManager = new LoadManagement(analytics, recovery);
+
+        const recoverySchedule = await loadManager.scheduleRecoveryDays(upcomingWeeks);
+
+        return {
+            recoveryWeeks: recoverySchedule,
+            totalWeeks: upcomingWeeks
+        };
+    } catch (error) {
+        console.error('Schedule recovery weeks error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to schedule recovery weeks.');
+    }
+});
+
+/**
+ * Validate weekly plan safety
+ */
+exports.validateWeeklyPlanSafety = onCall({
+    timeoutSeconds: 30,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const { plannedWeek } = request.data;
+
+    if (!plannedWeek || !plannedWeek.sessions) {
+        throw new HttpsError('invalid-argument', 'Planned week with sessions is required.');
+    }
+
+    try {
+        const userId = request.auth.uid;
+        const analytics = new PerformanceAnalytics(userId);
+        const recovery = new RecoveryPatternLearning(userId);
+        const loadManager = new LoadManagement(analytics, recovery);
+
+        const validation = await loadManager.validateWeeklyPlanSafety(plannedWeek);
+
+        return validation;
+    } catch (error) {
+        console.error('Validate weekly plan safety error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to validate plan safety.');
     }
 });
 
