@@ -42,20 +42,50 @@ Du er en erfaren treningsplanlegger som spesialiserer seg på utholdenhetstrenin
 
 Viktige prinsipper du følger:
 - 80/20-regelen: 80% lav intensitet, 20% høy intensitet for løping
-- Progressiv overbelastning: Maks 10% økning i ukentlig volum OG langturdistanse
+- Progressiv overbelastning: Følg EKSAKT progressjonstabell under (ikke gjetning!)
 - Periodisering: Bygg opp mot konkurranser med riktig tapering
 - Recovery: Vurder søvn, stress og tidligere belastning
 - Balanse: Kombiner løping med styrke uten overtrening
 - Individualitet: Tilpass til personens mål, tid og preferanser
 
+**PROGRESSJONSTABELL (UFRAVIKELIG):**
+╔══════════════╦════════════╦═══════════════╦═══════════════════╗
+║ Fase         ║ Uker       ║ Volum/Uke     ║ Deload            ║
+╠══════════════╬════════════╬═══════════════╬═══════════════════╣
+║ Base Phase   ║ 1-8        ║ +5-7%         ║ Uke 4 og 8 (-30%) ║
+║ Build Phase  ║ 9-12       ║ +8-10%        ║ Uke 12 (-40%)     ║
+║ Peak Phase   ║ 13-14      ║ 0% (hold)     ║ Ingen             ║
+║ Taper        ║ 15-16      ║ -30%, -50%    ║ N/A               ║
+╚══════════════╩════════════╩═══════════════╩═══════════════════╝
+
+EKSEMPEL PROGRESJON (startvolum 20 km):
+Uke 1: 20 km (base start)
+Uke 2: 21 km (+5%)
+Uke 3: 22 km (+4.8%)
+Uke 4: 15 km (-32% deload)
+Uke 5: 23 km (+53% fra deload, men kun +4.5% fra uke 3 - FORTSETT FRA UKE 3!)
+Uke 6: 24 km (+4.3%)
+Uke 7: 26 km (+8.3%)
+Uke 8: 18 km (-31% deload)
+
 **KRITISK: PROGRESSIVE LONG RUNS**
 For ALLE løpsdistanser må langturer bygges progressivt:
+
+LANGTURDISTANSE PROGRESJON:
+- Base Phase (Uke 1-8): +1 km per uke (konsistent, ALDRI hopp)
+- Build Phase (Uke 9-12): +1-2 km per uke
+- Peak Phase (Uke 13-14): Hold samme distanse
+- Taper (Uke 15-16): -20% per uke
+
+STARTDISTANSE:
 - Start med 50-60% av konkurransedistanse (minimum 8-10 km)
-- Øk med 1-2 km per uke (aldri mer enn 10%)
 - Peak long run: 80-120% av konkurransedistanse (avhengig av distanse)
-- Eksempel 65km race: Uke 1: 10km → Uke 4: 15km → Uke 8: 25km → Uke 12: 40km → Uke 16: 55km
-- Eksempel 21km race: Uke 1: 10km → Uke 4: 14km → Uke 8: 18km → Uke 10: 21km
-- Taper: Reduser langtur med 30-50% de siste 2 ukene
+
+EKSEMPLER:
+- 65km race: Uke 1: 10km → Uke 4: 15km → Uke 8: 25km → Uke 12: 40km → Uke 16: 55km
+- 21km race: Uke 1: 10km → Uke 4: 14km → Uke 8: 18km → Uke 10: 21km
+
+KRITISK: Langturen er ALLTID lørdag eller søndag, ALDRI andre dager!
 
 **ULTRAMARATHON-SPESIFIKT (50+ km):**
 For ultramarathon-distanser følger du disse ekstra prinsippene:
@@ -563,11 +593,11 @@ function buildUserPrompt(userData, chunkInfo) {
 🚨🚨🚨 UFRAVIKELIGE REGLER - BRYT ALDRI DISSE 🚨🚨🚨
 
 1. TRENINGSTYPE: ${trainingType === 'running_only'
-    ? `KUN LØPEØKTER!
+            ? `KUN LØPEØKTER!
    - ALDRI inkluder styrke, hyrox, crossfit økter
    - Tillatte typer: easy_run, tempo, interval, long_run, recovery, rest
    - INGEN andre økttyper er tillatt!`
-    : `Hybrid plan med løping + styrke/Hyrox/CrossFit.
+            : `Hybrid plan med løping + styrke/Hyrox/CrossFit.
    - Inkluder både løpeøkter og styrke/Hyrox-økter`}
 
 2. ANTALL ØKTER: Eksakt ${sessionsPerWeek || 4} treningsøkter per uke
@@ -581,6 +611,42 @@ function buildUserPrompt(userData, chunkInfo) {
 4. STARTVOLUM: Første uke starter på ca ${startKm} km løping
    - Øk med MAKS 10% per uke
    - Deload-uke hver 4. uke (reduser volum 30-40%)
+
+5. INTENSITETSFORDELING (${trainingType === 'running_only' ? 'KUN LØPING' : 'HYBRID'}):
+${trainingType === 'running_only'
+            ? `
+   Hvis 4 løpeøkter/uke:
+   - 1× Easy Run (Z1-Z2, 30-60 min)
+   - 1× Tempo/Threshold (Z3-Z4, 20-40 min)
+   - 1× Interval (Z4-Z5, 15-25 min arbeidstid totalt)
+   - 1× Long Run (Z1-Z2, 30-40% av ukentlig km)
+   
+   Hvis 5 løpeøkter/uke:
+   - 2× Easy Run
+   - 1× Tempo
+   - 1× Interval
+   - 1× Long Run
+   
+   80/20 REGEL (UFRAVIKELIG):
+   - Total ukentlig tid i Z1-Z2: minimum 75%
+   - Total ukentlig tid i Z3+: maksimum 25%
+   - Beregn dette basert på duration_minutes per økt`
+            : `
+   Hvis 4 økter/uke (2 løp, 2 styrke):
+   - 1× Easy/Tempo Run (Z1-Z3)
+   - 1× Long Run (Z1-Z2)
+   - 1× Hyrox/CrossFit
+   - 1× Strength
+   
+   Hvis 5 økter/uke (3 løp, 2 styrke):
+   - 1× Easy Run
+   - 1× Tempo/Interval
+   - 1× Long Run
+   - 1× Hyrox/CrossFit
+   - 1× Strength`
+        }
+
+   VIKTIG: Denne fordelingen MÅ følges hver uke (utenom deload)!
 
 KRITISK: Generer sessions for ALLE 7 dager i uken!
 - Treningsdager (${allowedDaysStr}): Faktiske økter
@@ -604,7 +670,26 @@ KRITISK: Generer sessions for ALLE 7 dager i uken!
         if (chunkInfo.isFirstChunk) {
             chunkPrompt = `Lag overordnet strategi og detaljer for ${weekRange}.`;
         } else {
-            chunkPrompt = `Lag detaljer for ${weekRange} basert på strategi: ${chunkInfo.overallStrategy}`;
+            // Bygg detaljert kontekst fra forrige chunk
+            const prevSummary = chunkInfo.previousWeekData || {};
+            const lastWeekNum = prevSummary.weekNumber || chunkInfo.startWeek - 1;
+            const lastVolume = prevSummary.running_km || startKm;
+            const lastLongRun = prevSummary.longest_run_km || Math.round(startKm * 0.3);
+            const lastDeload = prevSummary.lastDeloadWeek || 0;
+            const sessionDist = prevSummary.sessionDistribution || {};
+
+            chunkPrompt = `
+KONTEKST FRA FORRIGE CHUNK:
+- Forrige uke: ${lastWeekNum}
+- Forrige ukesvolum: ${lastVolume} km løping
+- Forrige langturdistanse: ${lastLongRun} km
+- Siste deload-uke: ${lastDeload}
+- Forrige øktfordeling: ${JSON.stringify(sessionDist)}
+
+Lag detaljer for ${weekRange} som FORTSETTER fra tallene over.
+Uke ${chunkInfo.startWeek} MÅ starte fra ${lastVolume} km (ikke restart fra ${startKm} km!).
+KRITISK: Hvis forrige uke var deload (lav volum), gjenoppta progresjon fra uken FØR deload.
+Strategi: ${chunkInfo.overallStrategy}`;
         }
     }
 

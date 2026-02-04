@@ -33,6 +33,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: 'auto',
+      devOptions: {
+        enabled: false // Disable in dev to avoid confusion
+      },
       includeAssets: ['favicon.svg', 'icons/apple-touch-icon.png', 'masked-icon.svg', 'icon.svg'],
       manifest: {
         name: 'RunCoach - AI Treningscoach',
@@ -73,6 +77,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Check for updates every 60 minutes
+        clientsClaim: true,
+        skipWaiting: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/firestore\.googleapis\.com\/.*/i,

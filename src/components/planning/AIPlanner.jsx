@@ -241,6 +241,33 @@ export default function AIPlanner() {
 
           // Store summary for next chunk's context
           if (i === chunkData.weeks.length - 1) {
+            // Calculate longest run in this week
+            const longestRun = Math.max(
+              ...week.sessions
+                .filter(s => s.type === 'long_run')
+                .map(s => s.details?.distance_km || 0),
+              0
+            )
+
+            // Count session types
+            const sessionDistribution = week.sessions.reduce((acc, session) => {
+              if (session.type !== 'rest') {
+                acc[session.type] = (acc[session.type] || 0) + 1
+              }
+              return acc
+            }, {})
+
+            // Find last deload week in all processed weeks
+            let lastDeloadWeek = 0
+            for (let j = allWeeksBuffer.length - 1; j >= 0; j--) {
+              const prevWeek = allWeeksBuffer[j]
+              const beforePrev = allWeeksBuffer[j - 1]
+              if (beforePrev && prevWeek.totalLoad.running_km < beforePrev.totalLoad.running_km) {
+                lastDeloadWeek = prevWeek.weekNumber
+                break
+              }
+            }
+
             lastWeekSummary = {
               weekNumber: weekNumber,
               phase: week.phase,
@@ -836,11 +863,9 @@ function DraggableSessionCard({ session, onEdit, onDelete, onView, onMarkComplet
     <article
       ref={setNodeRef}
       style={style}
-      className={`bg-background-secondary border border-white/10 rounded-xl p-3 ${
-        isCompleted ? 'opacity-60 bg-success/5 border-success/20' : ''
-      } ${
-        isDragging ? 'opacity-80 shadow-glow-primary z-50' : ''
-      } transition-all duration-200`}
+      className={`bg-background-secondary border border-white/10 rounded-xl p-3 ${isCompleted ? 'opacity-60 bg-success/5 border-success/20' : ''
+        } ${isDragging ? 'opacity-80 shadow-glow-primary z-50' : ''
+        } transition-all duration-200`}
       aria-label={`Treningsøkt: ${session.title}`}
     >
       <div className="flex items-start gap-3">

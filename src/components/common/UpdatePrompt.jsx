@@ -19,6 +19,13 @@ export default function UpdatePrompt() {
   } = useRegisterSW({
     onRegistered(r) {
       console.log('SW Registered:', r)
+      // Check for updates every 60 minutes
+      if (r) {
+        setInterval(() => {
+          console.log('Checking for SW updates...')
+          r.update()
+        }, 60 * 60 * 1000)
+      }
     },
     onRegisterError(error) {
       console.log('SW registration error', error)
