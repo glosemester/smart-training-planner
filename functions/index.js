@@ -877,6 +877,12 @@ const { WorkoutResponseTracker } = require('./analytics/workoutResponse');
 const { AdaptivePeriodization } = require('./training/adaptivePeriodization');
 const { LoadManagement } = require('./training/loadManagement');
 
+// ==========================================
+// MACHINE LEARNING MODELS (FASE 3)
+// ==========================================
+const { PerformancePredictor } = require('./ml/performancePredictor');
+const { WorkoutRecommender } = require('./ml/workoutRecommender');
+
 /**
  * Generate a periodized training plan using the algorithm.
  * This is an alternative to the AI-based generatePlan.
@@ -1393,6 +1399,154 @@ exports.validateWeeklyPlanSafety = onCall({
     } catch (error) {
         console.error('Validate weekly plan safety error:', error);
         throw new HttpsError('internal', error.message || 'Failed to validate plan safety.');
+    }
+});
+
+/**
+ * ==================================================
+ * MACHINE LEARNING PREDICTIONS (FASE 3)
+ * ==================================================
+ */
+
+/**
+ * Predict race day performance
+ */
+exports.predictRacePerformance = onCall({
+    timeoutSeconds: 30,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const { raceDate, raceDistance } = request.data;
+
+    if (!raceDate || !raceDistance) {
+        throw new HttpsError('invalid-argument', 'Race date and distance are required.');
+    }
+
+    try {
+        const userId = request.auth.uid;
+        const predictor = new PerformancePredictor(userId);
+
+        const raceDateObj = new Date(raceDate);
+        const prediction = await predictor.predictRaceDayPerformance(raceDateObj, raceDistance);
+
+        return prediction;
+    } catch (error) {
+        console.error('Predict race performance error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to predict performance.');
+    }
+});
+
+/**
+ * Get predictions for multiple race distances
+ */
+exports.getPredictions = onCall({
+    timeoutSeconds: 30,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const { targetDate } = request.data;
+
+    try {
+        const userId = request.auth.uid;
+        const predictor = new PerformancePredictor(userId);
+
+        const targetDateObj = targetDate ? new Date(targetDate) : null;
+        const predictions = await predictor.getPredictions(targetDateObj);
+
+        return predictions;
+    } catch (error) {
+        console.error('Get predictions error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to get predictions.');
+    }
+});
+
+/**
+ * Train performance prediction model
+ */
+exports.trainPredictionModel = onCall({
+    timeoutSeconds: 30,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    try {
+        const userId = request.auth.uid;
+        const predictor = new PerformancePredictor(userId);
+
+        const model = await predictor.trainModel();
+
+        return model;
+    } catch (error) {
+        console.error('Train prediction model error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to train model.');
+    }
+});
+
+/**
+ * Recommend next workout
+ */
+exports.recommendNextWorkout = onCall({
+    timeoutSeconds: 30,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const { context } = request.data;
+
+    if (!context || !context.phase) {
+        throw new HttpsError('invalid-argument', 'Context with phase is required.');
+    }
+
+    try {
+        const userId = request.auth.uid;
+        const recommender = new WorkoutRecommender(userId);
+
+        const recommendation = await recommender.recommendNextWorkout(context);
+
+        return recommendation;
+    } catch (error) {
+        console.error('Recommend next workout error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to recommend workout.');
+    }
+});
+
+/**
+ * Recommend weekly workout plan
+ */
+exports.recommendWeeklyPlan = onCall({
+    timeoutSeconds: 30,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const { context } = request.data;
+
+    if (!context || !context.phase || !context.availableDays) {
+        throw new HttpsError('invalid-argument', 'Context with phase and available days is required.');
+    }
+
+    try {
+        const userId = request.auth.uid;
+        const recommender = new WorkoutRecommender(userId);
+
+        const weeklyPlan = await recommender.recommendWeeklyPlan(context);
+
+        return weeklyPlan;
+    } catch (error) {
+        console.error('Recommend weekly plan error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to recommend weekly plan.');
     }
 });
 
