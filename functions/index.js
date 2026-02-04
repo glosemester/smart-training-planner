@@ -882,6 +882,7 @@ const { LoadManagement } = require('./training/loadManagement');
 // ==========================================
 const { PerformancePredictor } = require('./ml/performancePredictor');
 const { WorkoutRecommender } = require('./ml/workoutRecommender');
+const { EnhancedAdaptiveEngine } = require('./training/enhancedAdaptiveEngine');
 
 /**
  * Generate a periodized training plan using the algorithm.
@@ -1546,6 +1547,128 @@ exports.recommendWeeklyPlan = onCall({
         return weeklyPlan;
     } catch (error) {
         console.error('Recommend weekly plan error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to recommend weekly plan.');
+    }
+});
+
+/**
+ * ==================================================
+ * FASE 4: ENHANCED ADAPTIVE ENGINE
+ * ==================================================
+ */
+
+/**
+ * Generate comprehensive daily recommendation
+ * Uses personalized recovery patterns and ML predictions
+ */
+exports.generateDailyRecommendation = onCall({
+    timeoutSeconds: 60,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const { context } = request.data;
+
+    if (!context) {
+        throw new HttpsError('invalid-argument', 'Context is required.');
+    }
+
+    try {
+        const userId = request.auth.uid;
+        const engine = new EnhancedAdaptiveEngine(userId);
+
+        const recommendation = await engine.generateDailyRecommendation(context);
+
+        return recommendation;
+    } catch (error) {
+        console.error('Generate daily recommendation error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to generate recommendation.');
+    }
+});
+
+/**
+ * Get comprehensive athlete insights
+ * Combines all Fase 1-3 analytics
+ */
+exports.getAthleteInsights = onCall({
+    timeoutSeconds: 60,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    try {
+        const userId = request.auth.uid;
+        const engine = new EnhancedAdaptiveEngine(userId);
+
+        const insights = await engine.getAthleteInsights();
+
+        return insights;
+    } catch (error) {
+        console.error('Get athlete insights error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to get athlete insights.');
+    }
+});
+
+/**
+ * Predict race performance using enhanced engine
+ */
+exports.predictRacePerformanceEnhanced = onCall({
+    timeoutSeconds: 30,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const { raceDate, raceDistance } = request.data;
+
+    if (!raceDate || !raceDistance) {
+        throw new HttpsError('invalid-argument', 'Race date and distance are required.');
+    }
+
+    try {
+        const userId = request.auth.uid;
+        const engine = new EnhancedAdaptiveEngine(userId);
+
+        const prediction = await engine.predictRacePerformance(raceDate, raceDistance);
+
+        return prediction;
+    } catch (error) {
+        console.error('Predict race performance (enhanced) error:', error);
+        throw new HttpsError('internal', error.message || 'Failed to predict race performance.');
+    }
+});
+
+/**
+ * Get weekly plan recommendation using enhanced engine
+ */
+exports.recommendWeeklyPlanEnhanced = onCall({
+    timeoutSeconds: 60,
+    cors: true
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const { context } = request.data;
+
+    if (!context) {
+        throw new HttpsError('invalid-argument', 'Context is required.');
+    }
+
+    try {
+        const userId = request.auth.uid;
+        const engine = new EnhancedAdaptiveEngine(userId);
+
+        const weeklyPlan = await engine.recommendWeeklyPlan(context);
+
+        return weeklyPlan;
+    } catch (error) {
+        console.error('Recommend weekly plan (enhanced) error:', error);
         throw new HttpsError('internal', error.message || 'Failed to recommend weekly plan.');
     }
 });

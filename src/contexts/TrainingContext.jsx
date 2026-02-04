@@ -7,6 +7,7 @@ import {
   doc,
   Timestamp
 } from 'firebase/firestore'
+import { getFunctions, httpsCallable } from 'firebase/functions'
 import { db } from '../config/firebase'
 import { useAuth } from '../hooks/useAuth'
 import { useQueryClient } from '@tanstack/react-query'
@@ -31,6 +32,7 @@ export const useTraining = () => {
 export function TrainingProvider({ children }) {
   const { user, userProfile } = useAuth()
   const queryClient = useQueryClient()
+  const functions = getFunctions()
 
   // Queries
   const { data: workouts = [], isLoading: workoutsLoading, error: workoutsError } = useWorkouts()
@@ -481,6 +483,133 @@ export function TrainingProvider({ children }) {
     }
   }, [workouts, currentPlan, loading, getStats, whoopData, goals])
 
+  // ============================================
+  // FASE 4: Enhanced Adaptive Engine Integration
+  // ============================================
+
+  /**
+   * Get daily recommendation from Enhanced Adaptive Engine
+   * Uses personalized recovery patterns and ML predictions
+   */
+  const getDailyRecommendation = useCallback(async () => {
+    if (!user?.uid) throw new Error('Ikke innlogget')
+
+    try {
+      const generateDailyRecommendation = httpsCallable(functions, 'generateDailyRecommendation')
+
+      const result = await generateDailyRecommendation({
+        userId: user.uid,
+        context: {
+          todaysWorkout: currentPlan?.sessions?.find(s => s.day === new Date().toLocaleDateString('en-US', { weekday: 'lowercase' })),
+          currentPhase: currentPlan?.phase || 'base',
+          raceDistance: userProfile?.raceDistance,
+          weeksToRace: userProfile?.raceDate ?
+            Math.ceil((new Date(userProfile.raceDate) - new Date()) / (7 * 24 * 60 * 60 * 1000)) : null
+        }
+      })
+
+      return result.data
+    } catch (err) {
+      console.error('Failed to get daily recommendation:', err)
+      throw err
+    }
+  }, [user?.uid, currentPlan, userProfile, functions])
+
+  /**
+   * Get comprehensive athlete insights
+   * Combines all Fase 1-3 analytics
+   */
+  const getAthleteInsights = useCallback(async () => {
+    if (!user?.uid) throw new Error('Ikke innlogget')
+
+    try {
+      const getInsights = httpsCallable(functions, 'getAthleteInsights')
+      const result = await getInsights({ userId: user.uid })
+      return result.data
+    } catch (err) {
+      console.error('Failed to get athlete insights:', err)
+      throw err
+    }
+  }, [user?.uid, functions])
+
+  /**
+   * Get race performance prediction
+   */
+  const getRacePrediction = useCallback(async (raceDate, raceDistance) => {
+    if (!user?.uid) throw new Error('Ikke innlogget')
+
+    try {
+      const predictRacePerformance = httpsCallable(functions, 'predictRacePerformance')
+      const result = await predictRacePerformance({
+        userId: user.uid,
+        raceDate: raceDate || userProfile?.raceDate,
+        raceDistance: raceDistance || userProfile?.raceDistance
+      })
+      return result.data
+    } catch (err) {
+      console.error('Failed to get race prediction:', err)
+      throw err
+    }
+  }, [user?.uid, userProfile, functions])
+
+  /**
+   * Get injury risk assessment
+   */
+  const getInjuryRisk = useCallback(async () => {
+    if (!user?.uid) throw new Error('Ikke innlogget')
+
+    try {
+      const assessInjuryRisk = httpsCallable(functions, 'assessInjuryRisk')
+      const result = await assessInjuryRisk({ userId: user.uid })
+      return result.data
+    } catch (err) {
+      console.error('Failed to get injury risk:', err)
+      throw err
+    }
+  }, [user?.uid, functions])
+
+  /**
+   * Get workout recommendation for next session
+   */
+  const getNextWorkoutRecommendation = useCallback(async (context) => {
+    if (!user?.uid) throw new Error('Ikke innlogget')
+
+    try {
+      const recommendNextWorkout = httpsCallable(functions, 'recommendNextWorkout')
+      const result = await recommendNextWorkout({
+        userId: user.uid,
+        context: {
+          phase: context?.phase || currentPlan?.phase || 'base',
+          recoveryScore: whoopData?.recoveryScore,
+          raceDistance: userProfile?.raceDistance,
+          weeksToRace: userProfile?.raceDate ?
+            Math.ceil((new Date(userProfile.raceDate) - new Date()) / (7 * 24 * 60 * 60 * 1000)) : null,
+          ...context
+        }
+      })
+      return result.data
+    } catch (err) {
+      console.error('Failed to get workout recommendation:', err)
+      throw err
+    }
+  }, [user?.uid, currentPlan, userProfile, whoopData, functions])
+
+  /**
+   * Get performance analytics
+   */
+  const getPerformanceAnalytics = useCallback(async () => {
+    if (!user?.uid) throw new Error('Ikke innlogget')
+
+    try {
+      const getAnalytics = httpsCallable(functions, 'getPerformanceAnalytics')
+      const result = await getAnalytics({ userId: user.uid })
+      return result.data
+    } catch (err) {
+      console.error('Failed to get performance analytics:', err)
+      throw err
+    }
+  }, [user?.uid, functions])
+
   const value = {
     workouts,
     plans,
@@ -505,7 +634,15 @@ export function TrainingProvider({ children }) {
     setChatOpen,
     openChat,
     chatInitialMessage,
-    setChatInitialMessage
+    setChatInitialMessage,
+    // Enhanced Adaptive Engine API
+    getDailyRecommendation,
+    getAthleteInsights,
+    getRacePrediction,
+    getInjuryRisk,
+    getNextWorkoutRecommendation,
+    getPerformanceAnalytics,
+    whoopData
   }
 
   return (
